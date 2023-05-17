@@ -364,6 +364,10 @@ sub sp_clean_snaps($) {
 
 # Configuration
 
+sub api {
+    return 10;
+}
+
 # This is the most important method. The ID of the plugin
 sub type {
     return 'storpool';
