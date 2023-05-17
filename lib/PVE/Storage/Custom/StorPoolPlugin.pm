@@ -1,4 +1,4 @@
-package PVE::Storage::StorPoolPlugin;
+package PVE::Storage::Custom::StorPoolPlugin;
 
 use strict;
 use warnings;
