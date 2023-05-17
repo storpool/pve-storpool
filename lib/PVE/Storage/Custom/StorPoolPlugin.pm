@@ -1,5 +1,7 @@
 package PVE::Storage::Custom::StorPoolPlugin;
 
+use v5.16;
+
 use strict;
 use warnings;
 
