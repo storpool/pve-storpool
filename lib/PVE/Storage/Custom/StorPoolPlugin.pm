@@ -667,7 +667,7 @@ sub list_images {
     my $volInfo;
     my $return = [];
     
-	foreach my $fullname (keys $volStatus->{"data"}) {
+	foreach my $fullname (keys %{$volStatus->{"data"}}) {
 	    my $info = {};
 	    
 	    next if $fullname =~ /\@\d+$/;
@@ -838,7 +838,7 @@ sub delete_store {
 
 	foreach my $vol (@{$vols_hash->{data}}){
 		if ($vol->{templateName} eq $storeid){
-			if (first { $vol->{name} eq $_ } @$attachments){
+			if (first { $_ eq $vol->{name} } @$attachments){
 				sp_vol_detach($vol->{name},'all', 0);
 			}
 			sp_vol_del($vol->{name}, 0);
@@ -847,7 +847,7 @@ sub delete_store {
 
 	foreach my $snap (@{$snaps_hash->{data}}){
 		if ($snap->{templateName} eq $storeid){
-			if (first { $snap->{name} eq $_ } @$attachments){
+			if (first { $_ eq $snap->{name} } @$attachments){
 				sp_vol_detach($snap->{name},'all', 0);
 			}
 			sp_snap_del($snap->{name},0);
