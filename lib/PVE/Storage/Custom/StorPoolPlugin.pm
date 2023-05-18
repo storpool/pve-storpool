@@ -5,6 +5,8 @@ use v5.16;
 use strict;
 use warnings;
 
+use Carp qw(croak);
+use Data::Dumper;
 use File::Path;
 use PVE::Storage::Plugin;
 use PVE::JSONSchema qw(get_standard_option);
@@ -30,6 +32,13 @@ my $SP_URL = "";
 #TODO disks list shows saved states
 
 
+
+sub log_and_die($) {
+    my ($msg) = @_;
+
+    warn "FIXME-WIP: $msg\n";
+    croak "FIXME-WIP: $msg\n";
+}
 
 # Get some storpool settings from storpool.conf
 sub sp_confget() {
@@ -437,6 +446,8 @@ sub sp_parse_replication {
 # so we ignore "already exists" errors
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
+
+    log_and_die "activate_storage: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
     
     #sp_confget();
     
@@ -449,6 +460,8 @@ sub activate_storage {
 # Create the volume
 sub alloc_image {
 	my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size) = @_;
+
+        log_and_die "alloc_image: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, fmt => $fmt, name => $name, size => $size});
 	
 	# One of the few places where size is in K
 	$size *= 1024;
@@ -478,6 +491,7 @@ sub alloc_image {
 # Status of the space of the storage
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
+    log_and_die "status: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
     my $disks = sp_disk_list();
 
     my $total = 0;
@@ -519,6 +533,7 @@ sub status {
 
 sub parse_volname ($) {
     my ($class, $volname) = @_;
+    log_and_die "parse_volname: args: ".Dumper({class => $class, volname => $volname});
     my $res2;
     if ($volname =~ m/^(vm-|iso-)[^@]*$/) {
 	$res2 = sp_vol_info("$volname");
@@ -548,6 +563,7 @@ sub parse_volname ($) {
 
 sub filesystem_path {
     my ($class, $scfg, $volname, $storeid) = @_;
+    log_and_die "filesystem_path: args: ".Dumper({class => $class, scfg => $scfg, volname => $volname, storeid => $storeid});
 
     my ($vtype, $name, $vmid) = $class->parse_volname("$volname");
     
@@ -558,6 +574,7 @@ sub filesystem_path {
 
 sub activate_volume {
     my ($class, $storeid, $scfg, $volname, $exclusive, $cache) = @_;
+    log_and_die "activate_volume: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, exclusive => $exclusive, cache => $cache});
 	
     # Exclusive attaching is not yet supported.
     
@@ -574,6 +591,7 @@ sub activate_volume {
 
 sub deactivate_volume {
     my ($class, $storeid, $scfg, $volname, $cache) = @_;
+    log_and_die "deactivate_volume: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, cache => $cache});
     
     my $path = $class->path($scfg, $volname, $storeid);
     
@@ -590,6 +608,7 @@ sub deactivate_volume {
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
+    log_and_die "free_image: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, isBase => $isBase});
     my $isSnap = 0;
     $isSnap = 1 if grep { $_->{"name"} eq "$volname" } @{ sp_snap_list()->{"data"} };
     if ($isSnap) {
@@ -609,6 +628,7 @@ sub free_image {
 
 sub volume_has_feature {
     my ($class, $scfg, $feature, $storeid, $volname, $snapname, $running) = @_;
+    log_and_die "volume_has_feature: args: ".Dumper({class => $class, scfg => $scfg, feature => $feature, storeid => $storeid, snapname => $snapname, running => $running});
 
     my $features = {
 	snapshot => { current => 1, snap => 1 },
@@ -640,6 +660,7 @@ sub volume_has_feature {
 
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
+    log_and_die "volume_size_info: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, timeout => $timeout});
     #my $path = $class->filesystem_path($scfg, $volname);
     
     my $format = "raw";
@@ -663,6 +684,7 @@ sub volume_size_info {
 
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $vollist, $cache) = @_;
+    log_and_die "list_images: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, vollist => $vollist, cache => $cache});
 
     #TODO maybe use caches here
     
@@ -714,6 +736,7 @@ sub list_images {
 
 sub create_base {
     my ($class, $storeid, $scfg, $volname) = @_;
+    log_and_die "create_base: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname});
 
     my ($vtype, $name, $vmid, undef, undef, $isBase) =
 	$class->parse_volname($volname);
@@ -738,6 +761,7 @@ sub create_base {
 
 sub clone_image {
     my ($class, $scfg, $storeid, $volname, $vmid, $snap) = @_;
+    log_and_die "clone_image: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, vmid => $vmid, snap => $snap});
 
     my ($vtype, $basename, $basevmid, undef, undef, $isBase) =
 	$class->parse_volname($volname);
@@ -765,6 +789,7 @@ sub clone_image {
 
 sub volume_resize {
     my ($class, $scfg, $storeid, $volname, $size, $running) = @_;
+    log_and_die "volume_resize: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, size => $size, running => $running});
 
 
     sp_vol_update("$volname", $size, 0);
@@ -774,6 +799,7 @@ sub volume_resize {
 
 sub deactivate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
+    log_and_die "deactivate_storage: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
 
     #TODO this does NOT occur when deleteing a storage
     
@@ -781,6 +807,7 @@ sub deactivate_storage {
 
 sub check_connection {
     my ($class, $storeid, $scfg) = @_;
+    log_and_die "check_connection: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg});
     my $res = sp_services_list();
     return undef if ! defined $res;
     return undef if $res->{"error"};
@@ -789,6 +816,7 @@ sub check_connection {
 
 sub volume_snapshot {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
+    log_and_die "volume_snapshot: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap, running => $running});
 
     # We don't care if the machine is running, we can still do snapshots
     #return 1 if $running;
@@ -802,6 +830,7 @@ sub volume_snapshot {
 
 sub volume_snapshot_delete {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
+    log_and_die "volume_snapshot_delete: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap, running => $running});
 
     return 1 if $running;
     my $snapname = $volname;
@@ -813,6 +842,7 @@ sub volume_snapshot_delete {
 
 sub volume_snapshot_rollback {
     my ($class, $scfg, $storeid, $volname, $snap) = @_;
+    log_and_die "volume_snapshot_rollback: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap});
 
     my $snapname = $volname;
     $snapname =~ s/^vm-/snap-/;
@@ -826,12 +856,14 @@ sub volume_snapshot_rollback {
 
 sub get_subdir {
     my ($class, $scfg, $vtype) = @_;
+    log_and_die "get_subdir: args: ".Dumper({class => $class, scfg => $scfg, vtype => $vtype});
 	
     return "/dev/storpool";
 }
 
 sub delete_store {
 	my ($class, $storeid) = @_;
+    log_and_die "delete_store: args: ".Dumper({class => $class, storeid => $storeid});
 	my $vols_hash = sp_vol_list();
 	my $snaps_hash = sp_snap_list();
 	my $atts_hash = sp_attach_list();
