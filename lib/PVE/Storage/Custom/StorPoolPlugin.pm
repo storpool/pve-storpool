@@ -136,6 +136,7 @@ sub sp_temp_create($$$$$){
 	my $req = { 'replication' => $repl, 'name' => $name, 'placeAll' => $placeAll, 'placeTail' => $placeTail };
 	my $res = sp_post("VolumeTemplateCreate", $req);
 	
+        # TODO: pp: only ignore "already exists" errors
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
@@ -446,13 +447,12 @@ sub sp_parse_replication {
 # so we ignore "already exists" errors
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
-
-    log_and_die "activate_storage: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
     
     #sp_confget();
     
     my $replication = $scfg->{replication};
     
+    # TODO: pp: discuss: change this to require that the template already exists?
     #TODO should I check if already created rather than ignoring the error?
     sp_temp_create($storeid, $replication, "hdd", "hdd", 1);
 }
@@ -807,10 +807,9 @@ sub deactivate_storage {
 
 sub check_connection {
     my ($class, $storeid, $scfg) = @_;
-    log_and_die "check_connection: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg});
     my $res = sp_services_list();
-    return undef if ! defined $res;
-    return undef if $res->{"error"};
+    die "Could not fetch the StorPool services list\n" if ! defined $res;
+    die "Could not fetch the StorPool services list: ".$res->{'error'}."\n" if $res->{'error'};
     return 1;
 }
 
