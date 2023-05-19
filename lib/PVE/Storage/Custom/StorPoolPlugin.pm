@@ -491,7 +491,7 @@ sub alloc_image {
 # Status of the space of the storage
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
-    log_and_die "status: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
+    # TODO: pp: discuss: we should probably change this to process "template status" in some way
     my $disks = sp_disk_list();
 
     my $total = 0;
