@@ -18,6 +18,22 @@ use LWP::UserAgent;
 use LWP::Simple;
 
 use base qw(PVE::Storage::Plugin);
+
+# The volume tags that we look for and set
+use constant {
+    VTAG_VIRT => 'virt',
+    VTAG_CLUSTER => 'pve-cluster',
+    VTAG_TYPE => 'pve-type',
+    VTAG_FORMAT => 'pve-format',
+    VTAG_VM => 'pve-vm',
+    VTAG_BASE => 'pve-base',
+
+    VTAG_V_PVE => 'pve',
+};
+
+# TODO: pp: get this from the storage pool configuration
+use constant OUR_CLUSTER => 'test';
+
 my @SP_IDS = ();
 my $SP_HOST = "127.0.0.1";
 my $SP_PORT = "81";
@@ -372,6 +388,166 @@ sub sp_clean_snaps($) {
 	}
 }
 
+# Various name encoding helpers and utility functions
+
+# Get the value of a tag for a volume.
+#
+# Returns an undefined value if the volume does not have that tag.
+sub sp_vol_get_tag($ $) {
+    my ($vol, $tag) = @_;
+
+    ${$vol->{tags} // {}}{$tag}
+}
+
+# Check whether a volume has the specified tag, and that its value is as expected.
+sub sp_vol_tag_is($ $ $) {
+    my ($vol, $tag, $expected) = @_;
+    my $value = sp_vol_get_tag($vol, $tag);
+
+    defined($value) && $value eq $expected
+}
+
+# Check whether a content type denotes an image, either of a VM or of a container.
+sub sp_type_is_image($) {
+    my ($type) = @_;
+
+    $type eq 'images' || $type eq 'rootdir'
+}
+
+# Encode a single key/value pair.
+sub sp_encode_single($) {
+    my ($pair) = @_;
+    if (scalar @{$pair} != 2) {
+        log_and_die "Internal error: sp_encode_single: expected two elements: ".Dumper($pair);
+    }
+    my ($key, $value) = @{$pair};
+
+    if (length($key) != 1) {
+        log_and_die "Internal error: sp_encode_single: expected a single-character key: ".Dumper($pair);
+    }
+    $value //= '';
+
+    if (index($value, '-') != -1) {
+        log_and_die 'FIXME-TODO: sp_encode_single: encode a dash: '.Dumper($pair);
+    }
+    "$key$value"
+}
+
+# Encode a list of [key, value] pairs into a "V0-ga.b.c-timages"-style string.
+sub sp_encode_list($) {
+    my ($raw) = @_;
+    my @slugs = map { sp_encode_single($_) } @{$raw};
+    join('-', @slugs)
+}
+
+sub sp_encode_volsnap_from_tags($ $) {
+    my ($vol, $parent) = @_;
+
+    sp_encode_list([
+        [
+            ($vol->{'snapshot'} ? 'S' : 'V'),
+            '0',
+        ],
+        [
+            'g',
+            $vol->{'globalId'},
+        ],
+        [
+            't',
+            $vol->{'tags'}->{VTAG_TYPE()},
+        ],
+        [
+            'v',
+            $vol->{'tags'}->{VTAG_VM()} // '',
+        ],
+        [
+            'p',
+            defined($parent)
+                ? (
+                    ($parent->{'snapshot'} ? 'S' : 'V').
+                    $parent->{'globalId'}
+                )
+                : '',
+        ],
+        [
+            'B',
+            $vol->{'tags'}->{VTAG_BASE()} // '0',
+        ],
+        # TODO: pp: 'f' for a format other than "raw"
+    ])
+}
+
+sub sp_decode_single($) {
+    my ($part) = @_;
+
+    if (!defined($part) || $part eq '') {
+        log_and_die 'Internal error: sp_decode_single: got part '.Dumper(\$part);
+    }
+    split //, $part, 2
+}
+
+sub sp_decode_list($) {
+    my ($raw) = @_;
+    if (index($raw, '--') != -1) {
+        log_and_die 'FIXME-TODO: decode dashes: '.Dumper(\$raw);
+    }
+    my @parts = split /-/, $raw;
+    map { sp_decode_single($_) } @parts
+}
+
+sub sp_s($) {
+    my ($value) = @_;
+
+    if (defined($value) && $value eq '') {
+        undef
+    } else {
+        $value
+    }
+}
+
+sub sp_decode_volsnap_to_tags($) {
+    my ($volname) = @_;
+
+    my ($first, $rest) = split /-/, $volname, 2;
+    if (!defined($first)) {
+        log_and_die "sp_decode_volname_to_tags: no dashes at all: ".Dumper(\$volname);
+    }
+
+    my $snapshot;
+    if ($first eq 'V0') {
+        $snapshot = JSON::false;
+    } elsif ($first eq 'S0') {
+        $snapshot = JSON::true;
+    } else {
+        log_and_die 'sp_decode_volname_to_tags: unsupported first slug: '.Dumper(\$volname);
+    }
+
+    my %pairs = sp_decode_list($rest // '');
+
+    my $parent_spec = sp_s($pairs{'p'});
+    my $parent;
+    if (defined($parent_spec)) {
+        my ($parent_snaptype, $parent_id) = split //, $parent_spec, 2;
+        $parent = {
+            snapshot => $parent_snaptype eq 'S' ? JSON::true : JSON::false,
+            globalId => $parent_id,
+        };
+    }
+
+    return (
+        {
+            snapshot => $snapshot,
+            globalId => $pairs{'g'},
+            tags => {
+                VTAG_TYPE() => $pairs{'t'},
+                VTAG_VM() => sp_s($pairs{'v'}),
+                VTAG_BASE() => $pairs{'B'} // '0',
+            },
+        },
+        $parent,
+    );
+}
+
 # Configuration
 
 sub api {
@@ -533,32 +709,29 @@ sub status {
 
 sub parse_volname ($) {
     my ($class, $volname) = @_;
-    log_and_die "parse_volname: args: ".Dumper({class => $class, volname => $volname});
-    my $res2;
-    if ($volname =~ m/^(vm-|iso-)[^@]*$/) {
-	$res2 = sp_vol_info("$volname");
-    }else{
-	$res2 = sp_snap_info("$volname");
+
+    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
+
+    my ($basename, $baseid);
+    if (defined($parent)) {
+        my $vinfo = $parent->{snapshot}
+            ? sp_snap_info('~'.$parent->{'globalId'})
+            : sp_vol_info('~'.$parent->{'globalId'});
+        if (@{$vinfo->{'data'}}) {
+            $basename = $vinfo->{'data'}->[0]->{'globalId'};
+            $baseid = $vinfo->{'data'}->[0]->{'tags'}->{VTAG_VM()};
+        }
     }
-    my $basename = $res2->{"data"}[0]->{"parentName"};
-    my $basevmid = undef;
-    if ($basename) {
-	$basevmid = $basename;
-	$basevmid =~ s/^(base-(\d+)-\S+-\d+)$/$2/;
-    }else{
-	$basename = undef;
-    };    
-    if ($volname =~ m/^(vm-(\d+)-\S+-\S+(\.\S+)?)$/) {
-	return ('images', $1, $2, $basename, $basevmid, 0);
-    } elsif ($volname =~ m/^(base-(\d+)-\S+-\d+)$/) {
-	return ('images', $1, $2, $basename, $basevmid, 1);
-    } elsif ($volname =~ m/^(snap-(\d+)-\S+-\d+-(\S+))$/) {
-	return ('images', $1, $2, $basename, $basevmid, 1);
-    } elsif ($volname =~ m/^(iso-(\S+))$/) {
-	return ('iso', $1);
-    }
-    
-    die "unable to parse storpool volume name '$volname'\n";
+
+    return (
+        $vol->{'tags'}->{VTAG_TYPE()},
+        $vol->{'globalId'},
+        $vol->{'tags'}->{VTAG_VM()},
+        $basename,
+        $baseid,
+        ($vol->{'tags'}->{VTAG_BASE()} // '0') eq '1',
+        'raw',
+    )
 }
 
 sub filesystem_path {
@@ -682,56 +855,61 @@ sub volume_size_info {
 
 }
 
+sub list_volumes {
+    my ($class, $storeid, $scfg, $vmid, $content_types) = @_;
+    my %ctypes = map { $_ => 1 } @{$content_types};
+
+    my $volStatus = sp_vol_status();
+    my $res = [];
+
+    for my $vol (values %{$volStatus->{'data'}}) {
+        next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) && sp_vol_tag_is($vol, VTAG_CLUSTER, OUR_CLUSTER);
+        my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
+        next unless defined($v_type) && exists $ctypes{$v_type};
+        my $v_template = $vol->{templateName} // '';
+        next unless $v_template eq $storeid;
+
+        my $v_vmid = sp_vol_get_tag($vol, VTAG_VM);
+        if (defined $vmid) {
+            next unless defined($v_vmid) && $v_vmid eq $vmid;
+        }
+
+        my $v_parent = $vol->{parentName};
+        my ($parent, $parent_obj);
+        if ($v_parent) {
+            $parent_obj = $volStatus->{'data'}->{$v_parent};
+            if (defined $parent_obj) {
+                # Down the rabbit hole...
+                my $grandparent_name = $parent_obj->{parentName};
+                my $grandparent_obj = $grandparent_name
+                    ? $volStatus->{'data'}->{$grandparent_name}
+                    : undef;
+                $parent = sp_encode_volsnap_from_tags($parent_obj, $grandparent_obj);
+            }
+        }
+
+        # TODO: pp: apply the rootdir/images fix depending on $v_vmid
+
+        # TODO: pp: figure out whether we ever need to store non-raw data on StorPool
+        my $data = {
+            volid => "$storeid:".sp_encode_volsnap_from_tags($vol, $parent_obj),
+            content => $v_type,
+            vmid => $v_vmid,
+            size => $vol->{size},
+            used => $vol->{storedSize},
+            parent => $parent,
+            format => 'raw',
+        };
+        push @{$res}, $data;
+    }
+
+    return $res;
+}
+
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $vollist, $cache) = @_;
     log_and_die "list_images: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, vollist => $vollist, cache => $cache});
-
-    #TODO maybe use caches here
-    
-    #my $vgname = $scfg->{vgname};
-
-    #$cache->{lvs} = lvm_lvs() if !$cache->{lvs};
-    my $volStatus = sp_vol_status();
-    my $volInfo;
-    my $return = [];
-    
-	foreach my $fullname (keys %{$volStatus->{"data"}}) {
-	    my $info = {};
-	    
-	    next if $fullname =~ /\@\d+$/;
-	    
-	    my (undef, $volname, $id, undef, undef, $type) = $class->parse_volname($fullname);
-	    next if !$vollist && defined($vmid) && ($id ne $vmid);
-	    
-	    if ($volname =~ m/^(vm-|iso-)/) {
-		$volInfo = sp_vol_info("$volname");
-	    }else{
-		$volInfo = sp_snap_info("$volname");
-	    }
-	    my $volstor = $volInfo->{"data"}[0]->{"templateName"};
-	    
-	    next if (!$volstor or $volstor ne $storeid or $type != 0);
-		
-	    $info->{volid} = "$storeid:$volname";
-	    $info->{size} = $volStatus->{"data"}->{$fullname}->{"size"};
-	    $info->{used} = $volStatus->{"data"}->{$fullname}->{"storedSize"};
-	    $info->{vmid} = $id;
-	    my $parent = $volInfo->{"data"}[0]->{"parentName"};
-	    if ($parent) {
-		$info->{parent} = $parent;
-	    }else{
-		$info->{parent} = undef;
-	    }
-	    
-	    if ($volname =~ m/^iso-/) {
-		$info->{format} = 'iso';
-	    }else{
-		$info->{format} = 'raw';
-	    }
-	    
-	    push @$return, $info;
-	}
-    return $return;
+    # TODO: pp: reimplement this using parts of the list_volumes() code
 }
 
 sub create_base {
