@@ -252,10 +252,10 @@ sub sp_vol_attach($$$$) {
 	if ($spid eq "all") {
 		#Storpool does not support "all" in attach, hence the difference from detach
 		my $req = [{ 'volume' => "~$global_id", $perms => \@SP_IDS, 'force' => JSON::false }];
-		$res = sp_post("VolumesReassign", $req);
+		$res = sp_post("VolumesReassignWait", $req);
 	}else{
 		my $req = [{ 'volume' => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
-		$res = sp_post("VolumesReassign", $req);
+		$res = sp_post("VolumesReassignWait", $req);
 	}
 	
 	die "Storpool: $global_id, $spid, $perms, $ignoreError: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
@@ -273,7 +273,7 @@ sub sp_vol_detach($$$) {
 	}else{
 		$req = [{ 'volume' => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
 	}
-	my $res = sp_post("VolumesReassign", $req);
+	my $res = sp_post("VolumesReassignWait", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -841,25 +841,19 @@ sub volume_has_feature {
 
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
-    log_and_die "volume_size_info: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, timeout => $timeout});
-    #my $path = $class->filesystem_path($scfg, $volname);
     
-    my $format = "raw";
-    my $parent;
-    my $size = 0;
-    my $used = 0;
+    my ($vol, $parent_id) = sp_decode_volsnap_to_tags($volname);
+    my $global_id = $vol->{'globalId'};
     
     my $res = sp_vol_status();
-    $size = $res->{"data"}->{"$volname"}->{"size"};
-    $used = $res->{"data"}->{"$volname"}->{"storedSize"};
-    my $res2;
-    if ($volname =~ m/^(vm-|iso-)/) {
-	$res2 = sp_vol_info("$volname");
-    }else{
-	$res2 = sp_snap_info("$volname");
+    my @vol_status = grep { $_->{'globalId'} eq $global_id } values %{$res->{'data'}};
+    if (@vol_status != 1) {
+        log_and_die "Internal StorPool error: expected exactly one $global_id volume: ".Dumper(\@vol_status);
     }
-    $parent = $res2->{"data"}[0]->{"parentName"};
-    return wantarray ? ($size, $format, $used, $parent) : $size;
+    my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
+
+    # TODO: pp: do we ever need to support anything other than 'raw' here?
+    return wantarray ? ($size, 'raw', $used, $parent_id) : $size;
 
 }
 
