@@ -809,7 +809,6 @@ sub free_image {
 
 sub volume_has_feature {
     my ($class, $scfg, $feature, $storeid, $volname, $snapname, $running) = @_;
-    log_and_die "volume_has_feature: args: ".Dumper({class => $class, scfg => $scfg, feature => $feature, storeid => $storeid, snapname => $snapname, running => $running});
 
     my $features = {
 	snapshot => { current => 1, snap => 1 },
