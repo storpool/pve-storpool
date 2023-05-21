@@ -317,10 +317,10 @@ sub sp_vol_freeze($$) {
 	return $res
 }
 
-sub sp_vol_fromSnap ($$$) {
-	my ($parent, $newvol, $ignoreError) = @_;
+sub sp_vol_from_snapshot ($$;$) {
+	my ($global_id, $ignoreError, $tags) = @_;
 	
-	my $req = { 'parent' => $parent, 'name' => $newvol };
+	my $req = { 'parent' => "~$global_id", 'tags' => $tags // '' };
 	my $res = sp_post("VolumeCreate", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
@@ -805,23 +805,17 @@ sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
     my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $is_snapshot) = ($vol->{'globalId'}, $vol->{'snapshot'});
-    my $isSnap = scalar grep { $_->{'globalId'} eq $global_id } @{ sp_snap_list()->{'data'} };
-    if ($isSnap) {
-	sp_snap_del($global_id, 0)
-    }else{
-	# Volume could already be detached, we do not care about errors
-	sp_vol_detach($global_id, 'all', 1, $is_snapshot);
-        if ($is_snapshot) {
-            sp_snap_del($global_id, 0);
-        } else {
-            sp_vol_del($global_id, 0);
-        }
-	sp_clean_snaps($global_id);
+
+    # Volume could already be detached, we do not care about errors
+    sp_vol_detach($global_id, 'all', 1, $is_snapshot);
+
+    if ($is_snapshot) {
+        sp_snap_del($global_id, 0);
+    } else {
+        sp_vol_del($global_id, 0);
+        sp_clean_snaps($global_id);
     }
     
-    
-	
-
     return undef;
 }
 
@@ -977,10 +971,13 @@ sub create_base {
 
 sub clone_image {
     my ($class, $scfg, $storeid, $volname, $vmid, $snap) = @_;
-    log_and_die "clone_image: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, vmid => $vmid, snap => $snap});
 
-    my ($vtype, $basename, $basevmid, undef, undef, $isBase) =
-	$class->parse_volname($volname);
+    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
+    my ($global_id, $vtype, $isBase) = (
+        $vol->{'globalId'},
+        $vol->{'tags'}->{VTAG_TYPE()},
+        $vol->{'tags'}->{VTAG_BASE()},
+    );
 
     die "clone_image on wrong vtype '$vtype'\n" if $vtype ne 'images';
 
@@ -988,19 +985,17 @@ sub clone_image {
 
     die "clone_image only works on base images\n" if !$isBase;
 
-    my $name;
-    my $vols = sp_vol_status();
-    
-    for (my $i = 1; $i < 100; $i++) {
-    	my $tn = "vm-$vmid-disk-$i";
-    	if (!defined ($vols->{"data"}->{"$tn"})) {
-    		$name = $tn;
-    		last;
-    	}
-    }
-    sp_vol_fromSnap("$volname", "$name", 0);
+    my $current_tags = (
+        $vol->{'snapshot'} ? sp_snap_info('~'.$vol->{'globalId'}) : sp_vol_info('~'.$vol->{'globalId'})
+    )->{'data'}->[0]->{'tags'} // {};
 
-    return $name;
+    my $c_res = sp_vol_from_snapshot($global_id, 0, {
+        %{$current_tags},
+        VTAG_BASE() => '0',
+        VTAG_VM() => "$vmid",
+    });
+    my $newvol = sp_vol_info('~'.$c_res->{'data'}->{'globalId'});
+    return sp_encode_volsnap_from_tags($newvol->{'data'}->[0], $vol);
 }
 
 sub volume_resize {
