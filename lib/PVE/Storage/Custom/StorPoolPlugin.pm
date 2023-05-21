@@ -116,10 +116,13 @@ sub sp_request($$$){
 	}
 }
 
-sub sp_vol_create($$$$){
-	my ($name, $size, $template, $ignoreError) = @_;
+sub sp_vol_create($$$$;$){
+	my ($name, $size, $template, $ignoreError, $tags) = @_;
+        if (defined($name) && $name) {
+            log_and_die 'FIXME-WIP: sp_vol_create: non-null name: '.Dumper({name => $name, size => $size, template => $template, ignoreError => $ignoreError});
+        }
 	
-	my $req = { 'template' => $template, 'name' => $name, 'size' => $size };
+	my $req = { 'template' => $template, 'size' => $size, (defined($tags) ? (tags => $tags) : ()) };
 	my $res = sp_post("VolumeCreate", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
@@ -128,6 +131,7 @@ sub sp_vol_create($$$$){
 
 sub sp_vol_create_from_snap($$$$){
 	my ($name, $template, $snap, $ignoreError) = @_;
+        log_and_die 'sp vol_create_from_snap: args: '.Dumper({name => $name, template => $template, snap => $snap, ignoreError => $ignoreError});
 	
 	my $req = { 'template' => $template, 'name' => $name, 'parent' => $snap };
 	my $res = sp_post("VolumeCreate", $req);
@@ -261,13 +265,13 @@ sub sp_vol_attach($$$$) {
 }
 
 sub sp_vol_detach($$$) {
-	my ($volname, $spid, $ignoreError) = @_;
+	my ($global_id, $spid, $ignoreError) = @_;
 	
 	my $req;
 	if ($spid eq "all"){
-		$req = [{ 'volume' => $volname, "detach" => $spid, 'force' => JSON::false }];
+		$req = [{ 'volume' => "~$global_id", 'detach' => $spid, 'force' => JSON::false }];
 	}else{
-		$req = [{ 'volume' => $volname, "detach" => [$spid], 'force' => JSON::false }];
+		$req = [{ 'volume' => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
 	}
 	my $res = sp_post("VolumesReassign", $req);
 	
@@ -276,13 +280,13 @@ sub sp_vol_detach($$$) {
 }
 
 sub sp_snap_detach($$$) {
-	my ($snapname, $spid, $ignoreError) = @_;
+	my ($global_id, $spid, $ignoreError) = @_;
 	
 	my $req;
 	if ($spid eq "all"){
-		$req = [{ 'snapshot' => $snapname, "detach" => $spid, 'force' => JSON::false }];
+		$req = [{ 'snapshot' => "~$global_id", 'detach' => $spid, 'force' => JSON::false }];
 	}else{
-		$req = [{ 'snapshot' => $snapname, "detach" => [$spid], 'force' => JSON::false }];
+		$req = [{ 'snapshot' => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
 	}
 	my $res = sp_post("VolumesReassign", $req);
 	
@@ -291,10 +295,10 @@ sub sp_snap_detach($$$) {
 }
 
 sub sp_vol_del($$) {
-	my ($volname, $ignoreError) = @_;
+	my ($global_id, $ignoreError) = @_;
 	
 	my $req = {};
-	my $res = sp_post("VolumeDelete/$volname", $req);
+	my $res = sp_post("VolumeDelete/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -348,10 +352,10 @@ sub sp_vol_snapshot($$$) {
 }
 
 sub sp_snap_del($$) {
-	my ($snap, $ignoreError) = @_;
+	my ($global_id, $ignoreError) = @_;
 	
 	my $req = { };
-	my $res = sp_post("SnapshotDelete/$snap", $req);
+	my $res = sp_post("SnapshotDelete/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -369,6 +373,9 @@ sub sp_placementgroup_list($) {
 # Delete all snapshot that are parents of the volume provided
 # We do this the simplest way, by parsing info in the names
 sub sp_clean_snaps($) {
+        # TODO: pp: figure out how to do this with global IDs and tags
+        return;
+
 	my ($volname) = @_;
 	my @snaps = map { $_->{"name"} } @{sp_snap_list()->{"data"}};
 	my $vmid = undef;
@@ -601,7 +608,7 @@ sub options {
 sub check_config {
     my ($class, $sectionId, $config, $create, $skipSchemaCheck) = @_;
 
-    $config->{path} = "/dev/storpool" if $create && !$config->{path};
+    $config->{path} = "/dev/storpool-byid" if $create && !$config->{path};
 
     return $class->SUPER::check_config($sectionId, $config, $create, $skipSchemaCheck);
 }
@@ -637,31 +644,32 @@ sub activate_storage {
 sub alloc_image {
 	my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size) = @_;
 
-        log_and_die "alloc_image: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, fmt => $fmt, name => $name, size => $size});
-	
 	# One of the few places where size is in K
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
 	
-	die "illegal name '$name' - sould be 'vm-$vmid-*'\n" 
-		if  $name && $name !~ m/^vm-$vmid-/;
+        if (defined($name)) {
+            log_and_die "FIXME-WIP: alloc_image: non-null name passed: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, fmt => $fmt, name => $name, size => $size});
+        }
 	
-	# Search for a name that is not taken
-	if (!$name) {
-		my $vols = sp_vol_status();
-		
-		for (my $i = 1; $i < 100; $i++) {
-			my $tn = "vm-$vmid-disk-$i";
-			if (!defined ($vols->{"data"}->{"$tn"})) {
-				$name = $tn;
-				last;
-			}
-		}
-	}
-	
-	my $res = sp_vol_create("$name", $size, $storeid, 0);
-	
-	return $name
+	my $c_res = sp_vol_create(undef, $size, $storeid, 0, {
+            VTAG_VIRT() => VTAG_V_PVE,
+            VTAG_CLUSTER() => OUR_CLUSTER,
+            VTAG_TYPE() => 'images',
+            VTAG_FORMAT() => $fmt,
+            (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
+        });
+        my $global_id = ($c_res->{'data'} // {})->{'globalId'};
+        if (!defined($global_id) || $global_id eq '') {
+            log_and_die 'StorPool internal error: no globalId in the VolumeCreate API response: '.Dumper($c_res);
+        }
+
+        my $vol_res = sp_vol_info("~$global_id");
+        my $vol_data = $vol_res->{'data'};
+        if (!defined($vol_data) || ref($vol_data) ne 'ARRAY' || @{$vol_data} != 1) {
+            log_and_die 'StorPool internal error: volinfo for a just-created volume returned '.Dumper($vol_res);
+        }
+        sp_encode_volsnap_from_tags($vol_data->[0], undef);
 }
 
 # Status of the space of the storage
@@ -736,11 +744,10 @@ sub parse_volname ($) {
 
 sub filesystem_path {
     my ($class, $scfg, $volname, $storeid) = @_;
-    log_and_die "filesystem_path: args: ".Dumper({class => $class, scfg => $scfg, volname => $volname, storeid => $storeid});
 
     my ($vtype, $name, $vmid) = $class->parse_volname("$volname");
     
-    my $path = "/dev/storpool/$name";
+    my $path = "/dev/storpool-byid/$name";
 
     return wantarray ? ($path, $vmid, $vtype) : $path;
 }
@@ -781,16 +788,15 @@ sub deactivate_volume {
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
-    log_and_die "free_image: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, isBase => $isBase});
-    my $isSnap = 0;
-    $isSnap = 1 if grep { $_->{"name"} eq "$volname" } @{ sp_snap_list()->{"data"} };
+    my (undef, $global_id) = $class->parse_volname($volname);
+    my $isSnap = scalar grep { $_->{'globalId'} eq $global_id } @{ sp_snap_list()->{'data'} };
     if ($isSnap) {
-	sp_snap_del("$volname", 0)
+	sp_snap_del($global_id, 0)
     }else{
 	# Volume could already be detached, we do not care about errors
-	sp_vol_detach("$volname", "all", 1);
-	sp_vol_del("$volname", 0);
-	sp_clean_snaps($volname);
+	sp_vol_detach($global_id, 'all', 1);
+	sp_vol_del($global_id, 0);
+	sp_clean_snaps($global_id);
     }
     
     
