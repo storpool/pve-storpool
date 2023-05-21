@@ -246,19 +246,19 @@ sub sp_temp_get($) {
 
 #TODO, if adding more nodes, iso need to be attached to them as well
 sub sp_vol_attach($$$$) {
-	my ($volname, $spid, $perms, $ignoreError) = @_;
+	my ($global_id, $spid, $perms, $ignoreError) = @_;
 	
 	my $res;
 	if ($spid eq "all") {
 		#Storpool does not support "all" in attach, hence the difference from detach
-		my $req = [{ 'volume' => $volname, $perms => \@SP_IDS, 'force' => JSON::false }];
+		my $req = [{ 'volume' => "~$global_id", $perms => \@SP_IDS, 'force' => JSON::false }];
 		$res = sp_post("VolumesReassign", $req);
 	}else{
-		my $req = [{ 'volume' => $volname, $perms => [$spid], 'force' => JSON::false }];
+		my $req = [{ 'volume' => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
 		$res = sp_post("VolumesReassign", $req);
 	}
 	
-	die "Storpool: $volname, $spid, $perms, $ignoreError: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
+	die "Storpool: $global_id, $spid, $perms, $ignoreError: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	
 	
 	return $res
@@ -743,7 +743,7 @@ sub parse_volname ($) {
 }
 
 sub filesystem_path {
-    my ($class, $scfg, $volname, $storeid) = @_;
+    my ($class, $scfg, $volname, $snapname) = @_;
 
     my ($vtype, $name, $vmid) = $class->parse_volname("$volname");
     
@@ -754,36 +754,38 @@ sub filesystem_path {
 
 sub activate_volume {
     my ($class, $storeid, $scfg, $volname, $exclusive, $cache) = @_;
-    log_and_die "activate_volume: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, exclusive => $exclusive, cache => $cache});
-	
-    # Exclusive attaching is not yet supported.
-    
-    return if ($volname =~ m/^(base-(\d+)-\S+)$/);
 	
     my $path = $class->path($scfg, $volname, $storeid);
 
+    my (undef, $global_id) = $class->parse_volname($volname);
     my $host = hostname();
     my $perms = "rw";
+
+    # TODO: pp: remove this when the configuration goes into the plugin?
+    if (!%{$SP_NODES}) {
+        sp_confget();
+    }
     
-    sp_vol_attach("$volname", $SP_NODES->{$host}, $perms, 0);
-    die "Waiting for storpool volume timed out" if system ("/usr/bin/ssh", $host, "for ((i=0;i<30; i++)); do /usr/bin/test -e /dev/storpool/$volname && exit 0; sleep .1; done; exit 1");
+    sp_vol_attach($global_id, $SP_NODES->{$host}, $perms, 0);
+    log_and_die "Internal StorPool error: could not find the just-attached volume $global_id at $path" unless -e $path;
 }
 
 sub deactivate_volume {
     my ($class, $storeid, $scfg, $volname, $cache) = @_;
-    log_and_die "deactivate_volume: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname, cache => $cache});
     
     my $path = $class->path($scfg, $volname, $storeid);
     
     return if ! -b $path;
 
+    my (undef, $global_id) = $class->parse_volname($volname);
     my $host = hostname();
-    
-    #We do not want to detach iso files because they will not be displayed on the interface.
-    unless ($volname =~ m/^iso-/) {
-	my $res = sp_vol_detach("$volname", $SP_NODES->{$host}, 0);
+
+    # TODO: pp: remove this when the configuration goes into the plugin?
+    if (!%{$SP_NODES}) {
+        sp_confget();
     }
     
+    sp_vol_detach($global_id, $SP_NODES->{$host}, 0);
 }
 
 sub free_image {
