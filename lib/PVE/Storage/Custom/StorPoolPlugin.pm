@@ -27,6 +27,7 @@ use constant {
     VTAG_FORMAT => 'pve-format',
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
+    VTAG_COMMENT => 'pve-comment',
 
     VTAG_V_PVE => 'pve',
 };
@@ -245,16 +246,17 @@ sub sp_temp_get($) {
 }
 
 #TODO, if adding more nodes, iso need to be attached to them as well
-sub sp_vol_attach($$$$) {
-	my ($global_id, $spid, $perms, $ignoreError) = @_;
+sub sp_vol_attach($$$$;$) {
+	my ($global_id, $spid, $perms, $ignoreError, $is_snapshot) = @_;
 	
 	my $res;
+        my $keyword = $is_snapshot ? 'snapshot' : 'volume';
 	if ($spid eq "all") {
 		#Storpool does not support "all" in attach, hence the difference from detach
-		my $req = [{ 'volume' => "~$global_id", $perms => \@SP_IDS, 'force' => JSON::false }];
+		my $req = [{ $keyword => "~$global_id", $perms => \@SP_IDS, 'force' => JSON::false }];
 		$res = sp_post("VolumesReassignWait", $req);
 	}else{
-		my $req = [{ 'volume' => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
+		my $req = [{ $keyword => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
 		$res = sp_post("VolumesReassignWait", $req);
 	}
 	
@@ -264,14 +266,15 @@ sub sp_vol_attach($$$$) {
 	return $res
 }
 
-sub sp_vol_detach($$$) {
-	my ($global_id, $spid, $ignoreError) = @_;
+sub sp_vol_detach($$$;$) {
+	my ($global_id, $spid, $ignoreError, $is_snapshot) = @_;
 	
 	my $req;
+        my $keyword = $is_snapshot ? 'snapshot' : 'volume';
 	if ($spid eq "all"){
-		$req = [{ 'volume' => "~$global_id", 'detach' => $spid, 'force' => JSON::false }];
+		$req = [{ $keyword => "~$global_id", 'detach' => $spid, 'force' => JSON::false }];
 	}else{
-		$req = [{ 'volume' => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
+		$req = [{ $keyword => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
 	}
 	my $res = sp_post("VolumesReassignWait", $req);
 	
@@ -279,7 +282,7 @@ sub sp_vol_detach($$$) {
 	return $res
 }
 
-sub sp_snap_detach($$$) {
+sub sp_snap_detach($$$;$) {
 	my ($global_id, $spid, $ignoreError) = @_;
 	
 	my $req;
@@ -341,11 +344,12 @@ sub sp_services_list() {
 	return $res;
 }
 
-sub sp_vol_snapshot($$$) {
-	my ($vol, $snap, $ignoreError) = @_;
+sub sp_vol_snapshot($$;$) {
+	my ($global_id, $ignoreError, $tags) = @_;
 	
-	my $req = { 'name' => $snap };
-	my $res = sp_post("VolumeSnapshot/$vol", $req);
+	# my $req = { 'name' => $snap };
+        my $req = { tags => $tags // {}, };
+	my $res = sp_post("VolumeSnapshot/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -480,6 +484,10 @@ sub sp_encode_volsnap_from_tags($ $) {
             'B',
             $vol->{'tags'}->{VTAG_BASE()} // '0',
         ],
+        [
+            'c',
+            $vol->{'tags'}->{VTAG_COMMENT()} // '',
+        ],
         # TODO: pp: 'f' for a format other than "raw"
     ])
 }
@@ -549,6 +557,7 @@ sub sp_decode_volsnap_to_tags($) {
                 VTAG_TYPE() => $pairs{'t'},
                 VTAG_VM() => sp_s($pairs{'v'}),
                 VTAG_BASE() => $pairs{'B'} // '0',
+                VTAG_COMMENT() => sp_s($pairs{'c'}),
             },
         },
         $parent,
@@ -757,16 +766,18 @@ sub activate_volume {
 	
     my $path = $class->path($scfg, $volname, $storeid);
 
-    my (undef, $global_id) = $class->parse_volname($volname);
+    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $global_id = $vol->{'globalId'};
+
     my $host = hostname();
-    my $perms = "rw";
+    my $perms = $vol->{'snapshot'} ? 'ro' : 'rw';
 
     # TODO: pp: remove this when the configuration goes into the plugin?
     if (!%{$SP_NODES}) {
         sp_confget();
     }
     
-    sp_vol_attach($global_id, $SP_NODES->{$host}, $perms, 0);
+    sp_vol_attach($global_id, $SP_NODES->{$host}, $perms, 0, $vol->{'snapshot'});
     log_and_die "Internal StorPool error: could not find the just-attached volume $global_id at $path" unless -e $path;
 }
 
@@ -777,7 +788,9 @@ sub deactivate_volume {
     
     return if ! -b $path;
 
-    my (undef, $global_id) = $class->parse_volname($volname);
+    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $global_id = $vol->{'globalId'};
+
     my $host = hostname();
 
     # TODO: pp: remove this when the configuration goes into the plugin?
@@ -785,19 +798,24 @@ sub deactivate_volume {
         sp_confget();
     }
     
-    sp_vol_detach($global_id, $SP_NODES->{$host}, 0);
+    sp_vol_detach($global_id, $SP_NODES->{$host}, 0, $vol->{'snapshot'});
 }
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
-    my (undef, $global_id) = $class->parse_volname($volname);
+    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my ($global_id, $is_snapshot) = ($vol->{'globalId'}, $vol->{'snapshot'});
     my $isSnap = scalar grep { $_->{'globalId'} eq $global_id } @{ sp_snap_list()->{'data'} };
     if ($isSnap) {
 	sp_snap_del($global_id, 0)
     }else{
 	# Volume could already be detached, we do not care about errors
-	sp_vol_detach($global_id, 'all', 1);
-	sp_vol_del($global_id, 0);
+	sp_vol_detach($global_id, 'all', 1, $is_snapshot);
+        if ($is_snapshot) {
+            sp_snap_del($global_id, 0);
+        } else {
+            sp_vol_del($global_id, 0);
+        }
 	sp_clean_snaps($global_id);
     }
     
@@ -909,33 +927,52 @@ sub list_volumes {
 
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $vollist, $cache) = @_;
-    log_and_die "list_images: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, vollist => $vollist, cache => $cache});
-    # TODO: pp: reimplement this using parts of the list_volumes() code
+    log_and_die 'FIXME-TODO: list_images: non-null vmid: '.Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, vollist => $vollist, cache => $cache}) if defined($vmid);
+    $class->list_volumes($storeid, $scfg, $vmid, [keys %{$scfg->{content}}])
 }
 
 sub create_base {
     my ($class, $storeid, $scfg, $volname) = @_;
-    log_and_die "create_base: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, volname => $volname});
 
-    my ($vtype, $name, $vmid, undef, undef, $isBase) =
-	$class->parse_volname($volname);
+    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
+    my ($global_id, $vtype) = ($vol->{'globalId'}, $vol->{tags}->{VTAG_TYPE()});
+    # my ($vtype, $name, $vmid, undef, undef, $isBase) =
+	# $class->parse_volname($volname);
     die "create_base not possible with types other than images. '$vtype' given.\n" if $vtype ne 'images';
 
-    die "create_base not possible with base image\n" if $isBase;
+    die "create_base not possible with base image\n" if $vol->{tags}->{VTAG_BASE()};
 	
-    my ($size, $format, $used, $parent) = $class->volume_size_info($scfg, $storeid, $volname, 0);
-    die "file_size_info on '$volname' failed\n" if !($format && $size);
+    # my ($size, $format, $used, $parent) = $class->volume_size_info($scfg, $storeid, $volname, 0);
+    # die "file_size_info on '$volname' failed\n" if !($format && $size);
 
-    die "volname '$volname' contains wrong information about parent\n"
-	if $isBase && !$parent;
+    # die "volname '$volname' contains wrong information about parent\n"
+	# if $isBase && !$parent;
 
-    my $newname = $name;
-    $newname =~ s/^vm-/base-/;
+    # my $newname = $name;
+    # $newname =~ s/^vm-/base-/;
 
-    sp_vol_rename("$name", "$newname", 0);
-    sp_vol_freeze("$newname", 0);
+    # sp_vol_rename("$name", "$newname", 0);
+    # sp_vol_freeze("$newname", 0);
 
-    return $newname;
+    my $current_tags = (
+        $vol->{'snapshot'} ? sp_snap_info('~'.$vol->{'globalId'}) : sp_vol_info('~'.$vol->{'globalId'})
+    )->{'data'}->[0]->{'tags'} // {};
+
+    my $snap_res = sp_vol_snapshot($global_id, 0, {
+        %{$current_tags},
+        VTAG_BASE() => "1",
+    });
+
+    my $snap_id = $snap_res->{'data'}->{'snapshotGlobalId'};
+    my $snap = sp_snap_info("~$snap_id");
+    if (!defined($snap->{'data'}) || ref($snap->{'data'}) ne 'ARRAY' || @{$snap->{'data'}} != 1) {
+        log_and_die "Internal StorPool error: bad info for the just-created snapshot $snap_id: ".Dumper($snap);
+    }
+
+    sp_vol_detach($global_id, 'all', 0);
+    sp_vol_del($global_id, 0);
+
+    return sp_encode_volsnap_from_tags($snap->{'data'}->[0], $parent);
 }
 
 sub clone_image {
@@ -1045,29 +1082,25 @@ sub delete_store {
 	my $vols_hash = sp_vol_list();
 	my $snaps_hash = sp_snap_list();
 	my $atts_hash = sp_attach_list();
-	
-	my $attachments = [];
-	
-	foreach my $att (@{$atts_hash->{data}}){
-		push @$attachments, $att->{volume};
-	}
+
+        my %attachments = map { ($_->{volume}, 1) } @{$atts_hash->{'data'}};
 
 	foreach my $vol (@{$vols_hash->{data}}){
-		if ($vol->{templateName} eq $storeid){
-			if (first { $_ eq $vol->{name} } @$attachments){
-				sp_vol_detach($vol->{name},'all', 0);
-			}
-			sp_vol_del($vol->{name}, 0);
-		}
+                next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) && sp_vol_tag_is($vol, VTAG_CLUSTER, OUR_CLUSTER);
+                next unless $vol->{'templateName'} eq $storeid;
+                if ($attachments{$vol->{'name'}}) {
+                        sp_vol_detach($vol->{'globalId'}, 'all', 0);
+                }
+                sp_vol_del($vol->{'globalId'}, 0);
 	}
 
 	foreach my $snap (@{$snaps_hash->{data}}){
-		if ($snap->{templateName} eq $storeid){
-			if (first { $_ eq $snap->{name} } @$attachments){
-				sp_vol_detach($snap->{name},'all', 0);
-			}
-			sp_snap_del($snap->{name},0);
-		}
+                next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) && sp_vol_tag_is($snap, VTAG_CLUSTER, OUR_CLUSTER);
+                next unless $snap->{'templateName'} eq $storeid;
+                if ($attachments{$snap->{'name'}}) {
+                        sp_vol_detach($snap->{'globalId'}, 'all', 0, 1);
+                }
+                sp_snap_del($snap->{'globalId'},0);
 	}
 }
 
