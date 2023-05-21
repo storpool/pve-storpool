@@ -26,6 +26,9 @@ depending on whether the property is marked as nullable.
   more information needed to build a full object name for the parent.
 - `B`: boolean, nullable: is this a base image, e.g. a disk belonging to a VM template as
   opposed to one belonging to an actual VM
+- `c`: string, nullable: an optional comment describing e.g. an ISO image or a cloud
+  root disk image.
+  For the moment this string may not contain whitespace or dashes.
 
 ## Volume and snapshot tags
 
@@ -38,4 +41,6 @@ depending on whether the property is marked as nullable.
 - `pve-vm`: integer: the ID of the Proxmox VE virtual machine that this object belongs to
 - `pve-base`: boolean: is this a base image, e.g. a disk belonging to a VM template as
   opposed to one belonging to an actual VM
-
+- `pve-comment`: string: an optional comment describing e.g. an ISO image or a cloud
+  root disk image.
+  For the moment this string may not contain whitespace or dashes.
