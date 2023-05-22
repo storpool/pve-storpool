@@ -472,8 +472,8 @@ sub sp_encode_list($) {
     join('-', @slugs)
 }
 
-sub sp_encode_volsnap_from_tags($ $) {
-    my ($vol, $parent) = @_;
+sub sp_encode_volsnap_from_tags($) {
+    my ($vol) = @_;
 
     sp_encode_list([
         [
@@ -491,15 +491,6 @@ sub sp_encode_volsnap_from_tags($ $) {
         [
             'v',
             $vol->{'tags'}->{VTAG_VM()} // '',
-        ],
-        [
-            'p',
-            defined($parent)
-                ? (
-                    ($parent->{'snapshot'} ? 'S' : 'V').
-                    $parent->{'globalId'}
-                )
-                : '',
         ],
         [
             'B',
@@ -559,30 +550,16 @@ sub sp_decode_volsnap_to_tags($) {
     }
 
     my %pairs = sp_decode_list($rest // '');
-
-    my $parent_spec = sp_s($pairs{'p'});
-    my $parent;
-    if (defined($parent_spec)) {
-        my ($parent_snaptype, $parent_id) = split //, $parent_spec, 2;
-        $parent = {
-            snapshot => $parent_snaptype eq 'S' ? JSON::true : JSON::false,
-            globalId => $parent_id,
-        };
-    }
-
-    return (
-        {
-            snapshot => $snapshot,
-            globalId => $pairs{'g'},
-            tags => {
-                VTAG_TYPE() => $pairs{'t'},
-                VTAG_VM() => sp_s($pairs{'v'}),
-                VTAG_BASE() => $pairs{'B'} // '0',
-                VTAG_COMMENT() => sp_s($pairs{'c'}),
-            },
+    return {
+        snapshot => $snapshot,
+        globalId => $pairs{'g'},
+        tags => {
+            VTAG_TYPE() => $pairs{'t'},
+            VTAG_VM() => sp_s($pairs{'v'}),
+            VTAG_BASE() => $pairs{'B'} // '0',
+            VTAG_COMMENT() => sp_s($pairs{'c'}),
         },
-        $parent,
-    );
+    };
 }
 
 # Configuration
@@ -737,7 +714,7 @@ sub alloc_image {
         }
 
         my $vol = sp_vol_info_single($global_id);
-        sp_encode_volsnap_from_tags($vol, undef);
+        sp_encode_volsnap_from_tags($vol);
 }
 
 # Status of the space of the storage
@@ -786,25 +763,14 @@ sub status {
 sub parse_volname ($) {
     my ($class, $volname) = @_;
 
-    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
-
-    my ($basename, $baseid);
-    if (defined($parent)) {
-        my $vinfo = $parent->{snapshot}
-            ? sp_snap_info($parent->{'globalId'})
-            : sp_vol_info($parent->{'globalId'});
-        if (@{$vinfo->{'data'}}) {
-            $basename = $vinfo->{'data'}->[0]->{'globalId'};
-            $baseid = $vinfo->{'data'}->[0]->{'tags'}->{VTAG_VM()};
-        }
-    }
+    my $vol = sp_decode_volsnap_to_tags($volname);
 
     return (
         $vol->{'tags'}->{VTAG_TYPE()},
         $vol->{'globalId'},
         $vol->{'tags'}->{VTAG_VM()},
-        $basename,
-        $baseid,
+        undef,
+        undef,
         ($vol->{'tags'}->{VTAG_BASE()} // '0') eq '1',
         'raw',
     )
@@ -825,7 +791,7 @@ sub activate_volume {
 	
     my $path = $class->path($scfg, $volname, $storeid);
 
-    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
 
     my $host = hostname();
@@ -847,7 +813,7 @@ sub deactivate_volume {
     
     return if ! -b $path;
 
-    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
 
     my $host = hostname();
@@ -862,7 +828,7 @@ sub deactivate_volume {
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
-    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $is_snapshot) = ($vol->{'globalId'}, $vol->{'snapshot'});
 
     # Volume could already be detached, we do not care about errors
@@ -912,7 +878,7 @@ sub volume_has_feature {
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     
-    my ($vol, $parent_id) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
     
     my $res = sp_vol_status();
@@ -923,7 +889,7 @@ sub volume_size_info {
     my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
-    return wantarray ? ($size, 'raw', $used, $parent_id) : $size;
+    return wantarray ? ($size, 'raw', $used, undef) : $size;
 
 }
 
@@ -946,30 +912,16 @@ sub list_volumes {
             next unless defined($v_vmid) && $v_vmid eq $vmid;
         }
 
-        my $v_parent = $vol->{parentName};
-        my ($parent, $parent_obj);
-        if ($v_parent) {
-            $parent_obj = $volStatus->{'data'}->{$v_parent};
-            if (defined $parent_obj) {
-                # Down the rabbit hole...
-                my $grandparent_name = $parent_obj->{parentName};
-                my $grandparent_obj = $grandparent_name
-                    ? $volStatus->{'data'}->{$grandparent_name}
-                    : undef;
-                $parent = sp_encode_volsnap_from_tags($parent_obj, $grandparent_obj);
-            }
-        }
-
         # TODO: pp: apply the rootdir/images fix depending on $v_vmid
 
         # TODO: pp: figure out whether we ever need to store non-raw data on StorPool
         my $data = {
-            volid => "$storeid:".sp_encode_volsnap_from_tags($vol, $parent_obj),
+            volid => "$storeid:".sp_encode_volsnap_from_tags($vol),
             content => $v_type,
             vmid => $v_vmid,
             size => $vol->{size},
             used => $vol->{storedSize},
-            parent => $parent,
+            parent => undef,
             format => 'raw',
         };
         push @{$res}, $data;
@@ -987,7 +939,7 @@ sub list_images {
 sub create_base {
     my ($class, $storeid, $scfg, $volname) = @_;
 
-    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $vtype) = ($vol->{'globalId'}, $vol->{tags}->{VTAG_TYPE()});
     # my ($vtype, $name, $vmid, undef, undef, $isBase) =
 	# $class->parse_volname($volname);
@@ -1024,13 +976,13 @@ sub create_base {
     sp_vol_detach($global_id, 'all', 0);
     sp_vol_del($global_id, 0);
 
-    return sp_encode_volsnap_from_tags($snap, $parent);
+    return sp_encode_volsnap_from_tags($snap);
 }
 
 sub clone_image {
     my ($class, $scfg, $storeid, $volname, $vmid, $snap) = @_;
 
-    my ($vol, $parent) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $vtype, $isBase) = (
         $vol->{'globalId'},
         $vol->{'tags'}->{VTAG_TYPE()},
@@ -1055,14 +1007,14 @@ sub clone_image {
         VTAG_VM() => "$vmid",
     });
     my $newvol = sp_vol_info_single($c_res->{'data'}->{'globalId'});
-    return sp_encode_volsnap_from_tags($newvol, $vol);
+    return sp_encode_volsnap_from_tags($newvol);
 }
 
 sub volume_resize {
     my ($class, $scfg, $storeid, $volname, $size, $running) = @_;
 
 
-    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname);
     sp_vol_update($vol->{'globalId'}, $size, 0);
     
     return 1;
