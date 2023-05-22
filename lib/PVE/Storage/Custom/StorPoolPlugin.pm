@@ -671,10 +671,6 @@ sub alloc_image {
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
 	
-        if (defined($name)) {
-            log_and_die "FIXME-WIP: alloc_image: non-null name passed: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, fmt => $fmt, name => $name, size => $size});
-        }
-	
 	my $c_res = sp_vol_create($cfg, undef, $size, $storeid, 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
