@@ -5,7 +5,7 @@ use v5.16;
 use strict;
 use warnings;
 
-use Carp qw(croak);
+use Carp qw(carp croak);
 use Data::Dumper;
 use File::Path;
 use PVE::Storage;
@@ -38,11 +38,7 @@ use constant {
 # TODO: pp: get this from the storage pool configuration
 use constant OUR_CLUSTER => 'test';
 
-my $SP_CLUSTER_NAME;
-my $SP_OURID;
-my $SP_AUTH;
 my $SP_VERS = '1.0';
-my $SP_URL = "";
 
 #TODO upload same iso on two storpool templates (test)
 #TODO disks list shows iso files from other templates
@@ -66,38 +62,34 @@ sub sp_confget() {
         my ($var, $value) = split /=/, $_, 2;
         $res{$var} = $value;
     }
-    $SP_CLUSTER_NAME = $res{'SP_CLUSTER_NAME'};
-    $SP_OURID = $res{'SP_OURID'};
-    $SP_URL = "http://$res{SP_API_HTTP_HOST}:$res{SP_API_HTTP_PORT}/ctrl/$SP_VERS/";
-    $SP_AUTH = $res{'SP_AUTH_TOKEN'};
+    $res{'SP_URL'} = "http://$res{SP_API_HTTP_HOST}:$res{SP_API_HTTP_PORT}/ctrl/$SP_VERS/";
     return %res;
 }
 
 # Wrapper functions for the actual request
-sub sp_get($) {
-	my ($addr) = @_;
+sub sp_get($$) {
+	my ($cfg, $addr) = @_;
 
-	return sp_request('GET', $addr, undef);
+	return sp_request($cfg, 'GET', $addr, undef);
 }
 
-sub sp_post($$) {
+sub sp_post($$$) {
 	
-	my ($addr, $params) = @_;
-	my $res = sp_request('POST', $addr, $params);
+	my ($cfg, $addr, $params) = @_;
+	my $res = sp_request($cfg, 'POST', $addr, $params);
 	return $res
 }
 
 # HTTP request to the storpool api
 sub sp_request($$$){
-	sp_confget();
-	my ($method, $addr, $params) = @_;
+	my ($cfg, $method, $addr, $params) = @_;
 	
 	return undef if ( ${^GLOBAL_PHASE} eq 'START' );
 
 	my $h = HTTP::Headers->new;
-	$h->header('Authorization' => "Storpool v1:$SP_AUTH" );
+	$h->header('Authorization' => 'Storpool v1:'.$cfg->{sp}->{'SP_AUTH_TOKEN'});
 	
-	my $p = HTTP::Request->new($method, $SP_URL.$addr, $h);
+	my $p = HTTP::Request->new($method, $cfg->{'sp'}->{'SP_URL'}.$addr, $h);
 	$p->content( encode_json( $params ) ) if defined( $params );
 	
 	my $ua = new LWP::UserAgent;
@@ -114,42 +106,33 @@ sub sp_request($$$){
 }
 
 sub sp_vol_create($$$$;$){
-	my ($name, $size, $template, $ignoreError, $tags) = @_;
+	my ($cfg, $name, $size, $template, $ignoreError, $tags) = @_;
         if (defined($name) && $name) {
             log_and_die 'FIXME-WIP: sp_vol_create: non-null name: '.Dumper({name => $name, size => $size, template => $template, ignoreError => $ignoreError});
         }
 	
 	my $req = { 'template' => $template, 'size' => $size, (defined($tags) ? (tags => $tags) : ()) };
-	my $res = sp_post("VolumeCreate", $req);
+	my $res = sp_post($cfg, "VolumeCreate", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
-sub sp_vol_rename($$$){
-	my ($name, $newname, $ignoreError) = @_;
-	
-	my $req = { 'rename' => $newname };
-	my $res = sp_post("VolumeUpdate/$name", $req);
-	
-	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
-	return $res
-}
-
-sub sp_temp_create($$$$$){
-	my ($name, $repl, $placeAll, $placeTail, $ignoreError) = @_;
+sub sp_temp_create($$$$$$){
+	my ($cfg, $name, $repl, $placeAll, $placeTail, $ignoreError) = @_;
 	
 	my $req = { 'replication' => $repl, 'name' => $name, 'placeAll' => $placeAll, 'placeTail' => $placeTail };
-	my $res = sp_post("VolumeTemplateCreate", $req);
+	my $res = sp_post($cfg, "VolumeTemplateCreate", $req);
 	
         # TODO: pp: only ignore "already exists" errors
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
-sub sp_vol_status() {
+sub sp_vol_status($) {
+    my ($cfg) = @_;
 	
-	my $res = sp_get("VolumesGetStatus");
+	my $res = sp_get($cfg, "VolumesGetStatus");
 	
 	# If there is an error here it's fatal, we do not check.
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
@@ -157,65 +140,68 @@ sub sp_vol_status() {
 	return $res;
 }
 
-sub sp_vol_list() {
-	my $res = sp_get("VolumesList");
+sub sp_vol_list($) {
+    my ($cfg) = @_;
+	my $res = sp_get($cfg, "VolumesList");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
 	return $res;
 }
 
-sub sp_vol_info($) {
-	my ($global_id) = @_;
+sub sp_vol_info($$) {
+	my ($cfg, $global_id) = @_;
 	
-	my $res = sp_get("Volume/~$global_id");
+	my $res = sp_get($cfg, "Volume/~$global_id");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
 	return $res;
 }
 
-sub sp_vol_info_single($) {
-    my ($global_id) = @_;
+sub sp_vol_info_single($$) {
+    my ($cfg, $global_id) = @_;
 
-    my $res = sp_vol_info($global_id);
+    my $res = sp_vol_info($cfg, $global_id);
     if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
         log_and_die("Internal StorPool error: expected exactly one volume with the $global_id global ID, got ".Dumper($res));
     }
     $res->{'data'}->[0]
 }
 
-sub sp_snap_info_single($) {
-    my ($global_id) = @_;
+sub sp_snap_info_single($$) {
+    my ($cfg, $global_id) = @_;
 
-    my $res = sp_snap_info($global_id);
+    my $res = sp_snap_info($cfg, $global_id);
     if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
         log_and_die("Internal StorPool error: expected exactly one snapshot with the $global_id global ID, got ".Dumper($res));
     }
     $res->{'data'}->[0]
 }
 
-sub sp_snap_list() {
+sub sp_snap_list($) {
+    my ($cfg) = @_;
 	
-	my $res = sp_get("SnapshotsList");
-	
-	die $res->{'error'}->{'descr'} if ($res->{'error'});
-	
-	return $res;
-}
-
-sub sp_attach_list() {
-	my $res = sp_get("AttachmentsList");
+	my $res = sp_get($cfg, "SnapshotsList");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
 	return $res;
 }
 
-sub sp_snap_info($) {
-	my ($snapname) = @_;
+sub sp_attach_list($) {
+    my ($cfg) = @_;
+	my $res = sp_get($cfg, "AttachmentsList");
 	
-	my $res = sp_get("Snapshot/~$snapname");
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+	
+	return $res;
+}
+
+sub sp_snap_info($$) {
+	my ($cfg, $snapname) = @_;
+	
+	my $res = sp_get($cfg, "Snapshot/~$snapname");
 	#use Devel::StackTrace;
 	#my $trace = Devel::StackTrace->new;
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
@@ -223,9 +209,10 @@ sub sp_snap_info($) {
 	return $res;
 }
 
-sub sp_disk_list() {
+sub sp_disk_list($) {
+    my ($cfg) = @_;
 	
-	my $res = sp_get("DisksList");
+	my $res = sp_get($cfg, "DisksList");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
@@ -241,10 +228,10 @@ sub sp_temp_list() {
 	return $res;
 }
 
-sub sp_temp_get($) {
-	my ($name) = @_;
+sub sp_temp_get($$) {
+	my ($cfg, $name) = @_;
 	
-	my $res = sp_get("VolumeTemplateDescribe/$name");
+	my $res = sp_get($cfg, "VolumeTemplateDescribe/$name");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	return $res;
@@ -266,7 +253,7 @@ sub sp_vol_attach($$$$;$) {
 }
 
 sub sp_vol_detach($$$;$) {
-	my ($global_id, $spid, $ignoreError, $is_snapshot) = @_;
+	my ($cfg, $global_id, $spid, $ignoreError, $is_snapshot) = @_;
 	
 	my $req;
         my $keyword = $is_snapshot ? 'snapshot' : 'volume';
@@ -275,7 +262,7 @@ sub sp_vol_detach($$$;$) {
 	}else{
 		$req = [{ $keyword => "~$global_id", 'detach' => [$spid], 'force' => JSON::false }];
 	}
-	my $res = sp_post("VolumesReassignWait", $req);
+	my $res = sp_post($cfg, "VolumesReassignWait", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -316,57 +303,57 @@ sub sp_vol_freeze($$) {
 	return $res
 }
 
-sub sp_vol_from_snapshot ($$;$) {
-	my ($global_id, $ignoreError, $tags) = @_;
+sub sp_vol_from_snapshot ($$$;$) {
+	my ($cfg, $global_id, $ignoreError, $tags) = @_;
 	
 	my $req = { 'parent' => "~$global_id", 'tags' => $tags // '' };
-	my $res = sp_post("VolumeCreate", $req);
+	my $res = sp_post($cfg, "VolumeCreate", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
 # Currently only used for resize
-sub sp_vol_update ($$$) {
-	my ($global_id, $req, $ignoreError) = @_;
+sub sp_vol_update ($$$$) {
+	my ($cfg, $global_id, $req, $ignoreError) = @_;
 	
-	my $res = sp_post("VolumeUpdate/~$global_id", $req);
+	my $res = sp_post($cfg, "VolumeUpdate/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
-sub sp_services_list() {
+sub sp_services_list($) {
 	
-	my $res = sp_get("ServicesList");
+	my $res = sp_get($cfg, "ServicesList");
 	return $res;
 }
 
-sub sp_vol_snapshot($$;$) {
-	my ($global_id, $ignoreError, $tags) = @_;
+sub sp_vol_snapshot($$$;$) {
+	my ($cfg, $global_id, $ignoreError, $tags) = @_;
 	
 	# my $req = { 'name' => $snap };
         my $req = { tags => $tags // {}, };
-	my $res = sp_post("VolumeSnapshot/~$global_id", $req);
+	my $res = sp_post($cfg, "VolumeSnapshot/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
-sub sp_snap_del($$) {
-	my ($global_id, $ignoreError) = @_;
+sub sp_snap_del($$$) {
+	my ($cfg, $global_id, $ignoreError) = @_;
 	
 	my $req = { };
-	my $res = sp_post("SnapshotDelete/~$global_id", $req);
+	my $res = sp_post($cfg, "SnapshotDelete/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
 }
 
-sub sp_placementgroup_list($) {
-	my ($pg) = @_;
+sub sp_placementgroup_list($$) {
+	my ($cfg, $pg) = @_;
 	
-	my $res = sp_get("PlacementGroupDescribe/$pg");
+	my $res = sp_get($cfg, "PlacementGroupDescribe/$pg");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	return $res;
@@ -383,23 +370,23 @@ sub sp_vol_revert_to_snapshot($$) {
 }
 
 sub sp_volume_find_snapshots($$$) {
-    my ($storeid, $vol, $snap) = @_;
+    my ($cfg, $vol, $snap) = @_;
 
     grep {
         sp_vol_tag_is($_, VTAG_VIRT, VTAG_V_PVE) &&
         sp_vol_tag_is($_, VTAG_CLUSTER, OUR_CLUSTER) &&
-        $_->{'templateName'} eq $storeid &&
+        $_->{'templateName'} eq $cfg->{'storeid'} &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
-    } @{sp_snap_list()->{'data'}}
+    } @{sp_snap_list($cfg)->{'data'}}
 }
 
 # Delete all snapshot that are parents of the volume provided
 sub sp_clean_snaps($$) {
-    my ($storeid, $vol) = @_;
+    my ($cfg, $vol) = @_;
 
-    for my $snap_obj (sp_volume_find_snapshots($storeid, $vol, undef)) {
-        sp_snap_del($snap_obj->{'globalId'}, 0);
+    for my $snap_obj (sp_volume_find_snapshots($cfg, $vol, undef)) {
+        sp_snap_del($cfg, $snap_obj->{'globalId'}, 0);
     }
 }
 
@@ -555,6 +542,16 @@ sub sp_decode_volsnap_to_tags($) {
     };
 }
 
+sub sp_cfg($$) {
+    my ($storeid, $scfg) = @_;
+
+    return {
+        'storeid' => $storeid,
+        'scfg' => $scfg,
+        'sp' => sp_confget(),
+    };
+}
+
 # Configuration
 
 sub api {
@@ -622,11 +619,10 @@ sub plugindata {
 sub properties {
 
     return {
-	replication => {
-	    description => "Storpool test.",
-	    type => 'integer', format => 'pve-storage-replication',
+	'sp-extra-tags' => {
+	    description => 'Additional tags to add to the StorPool volumes and snapshots',
+	    type => 'string',
 	},
-	
     };
 }
 
@@ -634,13 +630,13 @@ sub options {
 
     return {
 	path => { fixed => 1 },
-	replication => { fixed => 1 },
         nodes => { optional => 1 },
 	shared => { optional => 1 },
 	disable => { optional => 1 },
         maxfiles => { optional => 1 },
 	content => { optional => 1 },
 	format => { optional => 1 },
+	'sp-extra-tags' => { optional => 1 },
    };
 }
 
@@ -672,19 +668,17 @@ sub sp_parse_replication {
 # so we ignore "already exists" errors
 sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
-    
-    #sp_confget();
-    
-    my $replication = $scfg->{replication};
+    my $cfg = sp_cfg($scfg, $storeid);
     
     # TODO: pp: discuss: change this to require that the template already exists?
     #TODO should I check if already created rather than ignoring the error?
-    sp_temp_create($storeid, $replication, "hdd", "hdd", 1);
+    sp_temp_create($cfg, $storeid, 3, "hdd", "hdd", 1);
 }
 
 # Create the volume
 sub alloc_image {
 	my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size) = @_;
+        my $cfg = sp_cfg($scfg, $storeid);
 
 	# One of the few places where size is in K
 	$size *= 1024;
@@ -694,7 +688,7 @@ sub alloc_image {
             log_and_die "FIXME-WIP: alloc_image: non-null name passed: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, fmt => $fmt, name => $name, size => $size});
         }
 	
-	my $c_res = sp_vol_create(undef, $size, $storeid, 0, {
+	my $c_res = sp_vol_create($cfg, undef, $size, $storeid, 0, {
             VTAG_VIRT() => VTAG_V_PVE,
             VTAG_CLUSTER() => OUR_CLUSTER,
             VTAG_TYPE() => 'images',
@@ -706,23 +700,24 @@ sub alloc_image {
             log_and_die 'StorPool internal error: no globalId in the VolumeCreate API response: '.Dumper($c_res);
         }
 
-        my $vol = sp_vol_info_single($global_id);
+        my $vol = sp_vol_info_single($cfg, $global_id);
         sp_encode_volsnap_from_tags($vol);
 }
 
 # Status of the space of the storage
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
     # TODO: pp: discuss: we should probably change this to process "template status" in some way
-    my $disks = sp_disk_list();
+    my $disks = sp_disk_list($cfg);
 
     my $total = 0;
     my $free = 0;
     my $used = 0;
     
-    my $template = sp_temp_get($storeid);
-    my $placeAll = sp_placementgroup_list($template->{data}->{placeAll})->{data}->{disks};
-    my $placeTail = sp_placementgroup_list($template->{data}->{placeTail})->{data}->{disks};
+    my $template = sp_temp_get($cfg, $storeid);
+    my $placeAll = sp_placementgroup_list($cfg, $template->{data}->{placeAll})->{data}->{disks};
+    my $placeTail = sp_placementgroup_list($cfg, $template->{data}->{placeTail})->{data}->{disks};
     my $minAG = 100000000000000;
 
     foreach my $diskID (@$placeAll){
@@ -781,23 +776,23 @@ sub filesystem_path {
 
 sub activate_volume {
     my ($class, $storeid, $scfg, $volname, $exclusive, $cache) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 	
     my $path = $class->path($scfg, $volname, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
 
-    my $host = hostname();
     my $perms = $vol->{'snapshot'} ? 'ro' : 'rw';
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_confget();
-    sp_vol_attach($global_id, $SP_OURID, $perms, 0, $vol->{'snapshot'});
+    sp_vol_attach($cfg, $global_id, $cfg->{'sp'}->{'SP_OURID'}, $perms, 0, $vol->{'snapshot'});
     log_and_die "Internal StorPool error: could not find the just-attached volume $global_id at $path" unless -e $path;
 }
 
 sub deactivate_volume {
     my ($class, $storeid, $scfg, $volname, $cache) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
     
     my $path = $class->path($scfg, $volname, $storeid);
     
@@ -806,26 +801,24 @@ sub deactivate_volume {
     my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
 
-    my $host = hostname();
-
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_confget();
-    sp_vol_detach($global_id, $SP_OURID, 0, $vol->{'snapshot'});
+    sp_vol_detach($cfg, $global_id, $cfg->{'sp'}->{'SP_OURID'}, 0, $vol->{'snapshot'});
 }
 
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
     my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $is_snapshot) = ($vol->{'globalId'}, $vol->{'snapshot'});
 
     # Volume could already be detached, we do not care about errors
-    sp_vol_detach($global_id, 'all', 1, $is_snapshot);
+    sp_vol_detach($cfg, $global_id, 'all', 1, $is_snapshot);
 
     if ($is_snapshot) {
-        sp_snap_del($global_id, 0);
+        sp_snap_del($cfg, $global_id, 0);
     } else {
-        sp_vol_del($global_id, 0);
-        sp_clean_snaps($storeid, $vol);
+        sp_vol_del($cfg, $global_id, 0);
+        sp_clean_snaps($cfg, $vol);
     }
     
     return undef;
@@ -865,11 +858,12 @@ sub volume_has_feature {
 
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
+    $cfg = sp_cfg($scfg, $storeid);
     
     my $vol = sp_decode_volsnap_to_tags($volname);
     my $global_id = $vol->{'globalId'};
     
-    my $res = sp_vol_status();
+    my $res = sp_vol_status($cfg);
     my @vol_status = grep { $_->{'globalId'} eq $global_id } values %{$res->{'data'}};
     if (@vol_status != 1) {
         log_and_die "Internal StorPool error: expected exactly one $global_id volume: ".Dumper(\@vol_status);
@@ -883,9 +877,10 @@ sub volume_size_info {
 
 sub list_volumes {
     my ($class, $storeid, $scfg, $vmid, $content_types) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
     my %ctypes = map { $_ => 1 } @{$content_types};
 
-    my $volStatus = sp_vol_status();
+    my $volStatus = sp_vol_status($cfg);
     my $res = [];
 
     for my $vol (values %{$volStatus->{'data'}}) {
@@ -926,6 +921,7 @@ sub list_images {
 
 sub create_base {
     my ($class, $storeid, $scfg, $volname) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $vtype) = ($vol->{'globalId'}, $vol->{tags}->{VTAG_TYPE()});
@@ -944,24 +940,21 @@ sub create_base {
     # my $newname = $name;
     # $newname =~ s/^vm-/base-/;
 
-    # sp_vol_rename("$name", "$newname", 0);
-    # sp_vol_freeze("$newname", 0);
-
     my $current_tags = (
         $vol->{'snapshot'}
-            ? sp_snap_info_single($vol->{'globalId'})
-            : sp_vol_info_single($vol->{'globalId'})
+            ? sp_snap_info_single($cfg, $vol->{'globalId'})
+            : sp_vol_info_single($cfg, $vol->{'globalId'})
     )->{'tags'} // {};
 
-    my $snap_res = sp_vol_snapshot($global_id, 0, {
+    my $snap_res = sp_vol_snapshot($cfg, $global_id, 0, {
         %{$current_tags},
         VTAG_BASE() => "1",
     });
 
     my $snap_id = $snap_res->{'data'}->{'snapshotGlobalId'};
-    my $snap = sp_snap_info_single($snap_id);
+    my $snap = sp_snap_info_single($cfg, $snap_id);
 
-    sp_vol_detach($global_id, 'all', 0);
+    sp_vol_detach($cfg, $global_id, 'all', 0);
     sp_vol_del($global_id, 0);
 
     return sp_encode_volsnap_from_tags($snap);
@@ -969,6 +962,7 @@ sub create_base {
 
 sub clone_image {
     my ($class, $scfg, $storeid, $volname, $vmid, $snap) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     my ($global_id, $vtype, $isBase) = (
@@ -985,25 +979,26 @@ sub clone_image {
 
     my $current_tags = (
         $vol->{'snapshot'}
-            ? sp_snap_info_single($vol->{'globalId'})
-            : sp_vol_info_single($vol->{'globalId'})
+            ? sp_snap_info_single($cfg, $vol->{'globalId'})
+            : sp_vol_info_single($cfg, $vol->{'globalId'})
     )->{'tags'} // {};
 
-    my $c_res = sp_vol_from_snapshot($global_id, 0, {
+    my $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, {
         %{$current_tags},
         VTAG_BASE() => '0',
         VTAG_VM() => "$vmid",
     });
-    my $newvol = sp_vol_info_single($c_res->{'data'}->{'globalId'});
+    my $newvol = sp_vol_info_single($cfg, $c_res->{'data'}->{'globalId'});
     return sp_encode_volsnap_from_tags($newvol);
 }
 
 sub volume_resize {
     my ($class, $scfg, $storeid, $volname, $size, $running) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
 
     my $vol = sp_decode_volsnap_to_tags($volname);
-    sp_vol_update($vol->{'globalId'}, { 'size' => $size }, 0);
+    sp_vol_update($cfg, $vol->{'globalId'}, { 'size' => $size }, 0);
     
     return 1;
 }
@@ -1018,7 +1013,8 @@ sub deactivate_storage {
 
 sub check_connection {
     my ($class, $storeid, $scfg) = @_;
-    my $res = sp_services_list();
+    my $cfg = sp_cfg($scfg, $storeid);
+    my $res = sp_services_list($cfg);
     die "Could not fetch the StorPool services list\n" if ! defined $res;
     die "Could not fetch the StorPool services list: ".$res->{'error'}."\n" if $res->{'error'};
     return 1;
@@ -1026,9 +1022,10 @@ sub check_connection {
 
 sub volume_snapshot {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
-    sp_vol_snapshot($vol->{'globalId'}, 0, {
+    sp_vol_snapshot($cfg, $vol->{'globalId'}, 0, {
         VTAG_VIRT() => VTAG_V_PVE,
         VTAG_CLUSTER() => OUR_CLUSTER,
         %{$vol->{tags}},
@@ -1041,10 +1038,11 @@ sub volume_snapshot {
 
 sub volume_snapshot_delete {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
-    for my $snap_obj (sp_volume_find_snapshots($storeid, $vol, $snap)) {
-        sp_snap_del($snap_obj->{'globalId'}, 0);
+    for my $snap_obj (sp_volume_find_snapshots($cfg, $vol, $snap)) {
+        sp_snap_del($cfg, $snap_obj->{'globalId'}, 0);
     }
 
     return undef;
@@ -1052,15 +1050,16 @@ sub volume_snapshot_delete {
 
 sub volume_snapshot_rollback {
     my ($class, $scfg, $storeid, $volname, $snap) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
-    my @found = sp_volume_find_snapshots($storeid, $vol, $snap);
+    my @found = sp_volume_find_snapshots($cfg, $vol, $snap);
     if (@found != 1) {
         log_and_die "volume_snapshot_rollback: expected exactly one '$snap' snapshot for $vol->{globalId}, got ".Dumper(\@found);
     }
 
     my $snap_obj = $found[0];
-    sp_vol_revert_to_snapshot($vol->{'globalId'}, $snap_obj->{'globalId'});
+    sp_vol_revert_to_snapshot($cfg, $vol->{'globalId'}, $snap_obj->{'globalId'});
     
     return undef;
 }
@@ -1078,10 +1077,11 @@ sub get_subdir {
 
 sub delete_store {
 	my ($class, $storeid) = @_;
+        my $cfg = sp_cfg($storeid, {});
     log_and_die "delete_store: args: ".Dumper({class => $class, storeid => $storeid});
-	my $vols_hash = sp_vol_list();
-	my $snaps_hash = sp_snap_list();
-	my $atts_hash = sp_attach_list();
+	my $vols_hash = sp_vol_list($cfg);
+	my $snaps_hash = sp_snap_list($cfg);
+	my $atts_hash = sp_attach_list($cfg);
 
         my %attachments = map { ($_->{volume}, 1) } @{$atts_hash->{'data'}};
 
@@ -1089,7 +1089,7 @@ sub delete_store {
                 next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) && sp_vol_tag_is($vol, VTAG_CLUSTER, OUR_CLUSTER);
                 next unless $vol->{'templateName'} eq $storeid;
                 if ($attachments{$vol->{'name'}}) {
-                        sp_vol_detach($vol->{'globalId'}, 'all', 0);
+                        sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
                 }
                 sp_vol_del($vol->{'globalId'}, 0);
 	}
@@ -1106,16 +1106,17 @@ sub delete_store {
 
 sub rename_volume($$$$$$) {
     my ($class, $scfg, $storeid, $source_volname, $target_vmid, $target_volname) = @_;
+    my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($source_volname);
-    sp_vol_update($vol->{'globalId'}, {
+    sp_vol_update($cfg, $vol->{'globalId'}, {
         'tags' => {
             %{$vol->{'tags'}},
             VTAG_VM() => $target_vmid,
         },
     }, 0);
 
-    my $updated = sp_vol_info_single($vol->{'globalId'});
+    my $updated = sp_vol_info_single($cfg, $vol->{'globalId'});
     "$storeid:".sp_encode_volsnap_from_tags($updated)
 }
 
