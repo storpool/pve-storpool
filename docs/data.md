@@ -21,14 +21,13 @@ depending on whether the property is marked as nullable.
 - `g`: string: the StorPool global ID of the volume or snapshot
 - `t`: string: the Proxmox VE content type of the object, e.g. "images", "iso", etc.
 - `v`: integer, nullable: the Proxmox VM that this object belongs to, if any
-- `p`: string, nullable: the StorPool global ID of the object's parent, if any.
-  A parser may need to send a StorPool `Volume` or `Snapshot` API query to obtain
-  more information needed to build a full object name for the parent.
 - `B`: boolean, nullable: is this a base image, e.g. a disk belonging to a VM template as
   opposed to one belonging to an actual VM
 - `c`: string, nullable: an optional comment describing e.g. an ISO image or a cloud
   root disk image.
   For the moment this string may not contain whitespace or dashes.
+- `s`: string, nullable: the name of the VM snapshot that this disk is part of
+- `P`: string, nullable: the volume that this disk represents in the VM snapshot
 
 ## Volume and snapshot tags
 
@@ -44,3 +43,5 @@ depending on whether the property is marked as nullable.
 - `pve-comment`: string: an optional comment describing e.g. an ISO image or a cloud
   root disk image.
   For the moment this string may not contain whitespace or dashes.
+- `pve-snap`: string: the name of the VM snapshot that this disk is part of, if any
+- `pve-snap-parent`: string: the volume that this disk represents in the VM snapshot, if any
