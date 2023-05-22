@@ -571,9 +571,14 @@ sub api {
     my $minver = 3;
     my $maxver = 10;
 
+    # We kind of depend on the way `use constant` declares a function.
+    # If we try to use barewords and not functions, the compiler will
+    # throw a compile-time error, not a run-time one, which would
+    # disable the whole plugin.
+
     my $apiver;
     eval {
-        $apiver = PVE::Storage::APIVER;
+        $apiver = PVE::Storage::APIVER();
     };
     if ($@) {
         # Argh, they don't even declare APIVER? Well... too bad.
@@ -582,7 +587,7 @@ sub api {
 
     my $apiage;
     eval {
-        $apiage = PVE::Storage::APIAGE;
+        $apiage = PVE::Storage::APIAGE();
     };
     if ($@) {
         # Hm, no APIAGE? OK, is their version within our range?
