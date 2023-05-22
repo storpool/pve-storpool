@@ -133,17 +133,6 @@ sub sp_vol_create($$$$;$){
 	return $res
 }
 
-sub sp_vol_create_from_snap($$$$){
-	my ($name, $template, $snap, $ignoreError) = @_;
-        log_and_die 'sp vol_create_from_snap: args: '.Dumper({name => $name, template => $template, snap => $snap, ignoreError => $ignoreError});
-	
-	my $req = { 'template' => $template, 'name' => $name, 'parent' => $snap };
-	my $res = sp_post("VolumeCreate", $req);
-	
-	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
-	return $res
-}
-
 sub sp_vol_rename($$$){
 	my ($name, $newname, $ignoreError) = @_;
 	
