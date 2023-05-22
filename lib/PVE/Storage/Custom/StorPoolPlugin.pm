@@ -38,12 +38,9 @@ use constant {
 # TODO: pp: get this from the storage pool configuration
 use constant OUR_CLUSTER => 'test';
 
-my @SP_IDS = ();
-my $SP_HOST = "127.0.0.1";
-my $SP_PORT = "81";
+my $SP_CLUSTER_NAME;
+my $SP_OURID;
 my $SP_AUTH;
-my $SP_NODES = {};
-
 my $SP_VERS = '1.0';
 my $SP_URL = "";
 
@@ -62,22 +59,18 @@ sub log_and_die($) {
 
 # Get some storpool settings from storpool.conf
 sub sp_confget() {
-	#TODO gives error on starting of the service (compilation failed). Does it expect the file to always be there?
-	open( INPUTFILE, "</etc/storpool.conf" ) or die "$!";
-	my $node;
-	@SP_IDS = ();
-	while (<INPUTFILE>) {
-		$node = $1 if ( $_ =~ m/^\s*\[(\S+)\]\s*$/ );
-		if ( $_ =~ m/^\s*SP_OURID\s*=(\d+)/ ){
-			push @SP_IDS, int $1;
-			$SP_NODES->{$node} = int $1;
-		}
-		$SP_HOST = $1 if ( $_ =~ m/^\s*SP_API_HTTP_HOST\s*=(\S+)/ );
-		$SP_PORT = $1 if ( $_ =~ m/^\s*SP_API_HTTP_PORT\s*=(\d+)/ );
-		$SP_AUTH = $1 if ( $_ =~ m/^\s*SP_AUTH_TOKEN\s*=(\d+)/ );
-		$SP_URL = "http://$SP_HOST:$SP_PORT/ctrl/$SP_VERS/"
-	}
-	return { 'sp_host' => $SP_HOST, 'sp_port' => $SP_PORT, 'sp_auth' => $SP_AUTH, 'sp_nodes' => $SP_NODES, 'sp_ids' => \@SP_IDS } ;
+    my %res;
+    open my $f, '-|', 'storpool_confget' or log_and_die "Could not run storpool_confget: $!";
+    while (<$f>) {
+        chomp;
+        my ($var, $value) = split /=/, $_, 2;
+        $res{$var} = $value;
+    }
+    $SP_CLUSTER_NAME = $res{'SP_CLUSTER_NAME'};
+    $SP_OURID = $res{'SP_OURID'};
+    $SP_URL = "http://$res{SP_API_HTTP_HOST}:$res{SP_API_HTTP_PORT}/ctrl/$SP_VERS/";
+    $SP_AUTH = $res{'SP_AUTH_TOKEN'};
+    return %res;
 }
 
 # Wrapper functions for the actual request
@@ -263,14 +256,8 @@ sub sp_vol_attach($$$$;$) {
 	
 	my $res;
         my $keyword = $is_snapshot ? 'snapshot' : 'volume';
-	if ($spid eq "all") {
-		#Storpool does not support "all" in attach, hence the difference from detach
-		my $req = [{ $keyword => "~$global_id", $perms => \@SP_IDS, 'force' => JSON::false }];
-		$res = sp_post("VolumesReassignWait", $req);
-	}else{
-		my $req = [{ $keyword => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
-		$res = sp_post("VolumesReassignWait", $req);
-	}
+        my $req = [{ $keyword => "~$global_id", $perms => [$spid], 'force' => JSON::false }];
+        $res = sp_post("VolumesReassignWait", $req);
 	
 	die "Storpool: $global_id, $spid, $perms, $ignoreError: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	
@@ -804,11 +791,8 @@ sub activate_volume {
     my $perms = $vol->{'snapshot'} ? 'ro' : 'rw';
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    if (!%{$SP_NODES}) {
-        sp_confget();
-    }
-    
-    sp_vol_attach($global_id, $SP_NODES->{$host}, $perms, 0, $vol->{'snapshot'});
+    sp_confget();
+    sp_vol_attach($global_id, $SP_OURID, $perms, 0, $vol->{'snapshot'});
     log_and_die "Internal StorPool error: could not find the just-attached volume $global_id at $path" unless -e $path;
 }
 
@@ -825,11 +809,8 @@ sub deactivate_volume {
     my $host = hostname();
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    if (!%{$SP_NODES}) {
-        sp_confget();
-    }
-    
-    sp_vol_detach($global_id, $SP_NODES->{$host}, 0, $vol->{'snapshot'});
+    sp_confget();
+    sp_vol_detach($global_id, $SP_OURID, 0, $vol->{'snapshot'});
 }
 
 sub free_image {
