@@ -810,6 +810,7 @@ sub volume_has_feature {
 		  current => 1,
 		  snap => 1 },
         rename => { current => 1, },
+        sparseinit => { base => 1, current => 1, snap => 1 },
     };
 
     my ($vtype, $name, $vmid, , undef, undef, $isBase) =
