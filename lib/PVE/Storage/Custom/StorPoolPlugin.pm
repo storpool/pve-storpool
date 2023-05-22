@@ -265,6 +265,16 @@ sub sp_vol_from_snapshot ($$$;$) {
 	return $res
 }
 
+sub sp_vol_from_parent_volume ($$$;$) {
+	my ($cfg, $global_id, $ignoreError, $tags) = @_;
+	
+	my $req = { 'baseOn' => "~$global_id", 'tags' => $tags // '' };
+	my $res = sp_post($cfg, "VolumeCreate", $req);
+	
+	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
+	return $res
+}
+
 # Currently only used for resize
 sub sp_vol_update ($$$$) {
 	my ($cfg, $global_id, $req, $ignoreError) = @_;
@@ -804,7 +814,7 @@ sub volume_has_feature {
 
     my $features = {
 	snapshot => { current => 1, snap => 1 },
-	clone => { base => 1, snap => 1 },
+	clone => { base => 1, current => 1, snap => 1 },
 	template => { current => 1 },
 	copy => { base => 1,
 		  current => 1,
@@ -960,15 +970,25 @@ sub clone_image {
 
     die "clone_image on wrong vtype '$vtype'\n" if $vtype ne 'images';
 
-    die "clone_image only works on StorPool snapshots\n" if !$vol->{'snapshot'};
+    my $c_res;
+    if ($vol->{'snapshot'}) {
+        my $current_tags = sp_snap_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
 
-    my $current_tags = sp_snap_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
+        $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, {
+            %{$current_tags},
+            VTAG_BASE() => '0',
+            VTAG_VM() => "$vmid",
+        });
+    } else {
+        my $current_tags = sp_vol_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
 
-    my $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, {
-        %{$current_tags},
-        VTAG_BASE() => '0',
-        VTAG_VM() => "$vmid",
-    });
+        $c_res = sp_vol_from_parent_volume($cfg, $global_id, 0, {
+            %{$current_tags},
+            VTAG_BASE() => '0',
+            VTAG_VM() => "$vmid",
+        });
+    }
+
     my $newvol = sp_vol_info_single($cfg, $c_res->{'data'}->{'globalId'});
     return sp_encode_volsnap_from_tags($newvol);
 }
