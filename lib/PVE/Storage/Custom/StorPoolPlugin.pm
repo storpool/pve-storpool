@@ -350,10 +350,10 @@ sub sp_vol_from_snapshot ($$;$) {
 
 # Currently only used for resize
 sub sp_vol_update ($$$) {
-	my ($name, $size, $ignoreError) = @_;
+	my ($global_id, $size, $ignoreError) = @_;
 	
 	my $req = { 'size' => $size };
-	my $res = sp_post("VolumeUpdate/$name", $req);
+	my $res = sp_post("VolumeUpdate/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
 	return $res
@@ -1060,10 +1060,10 @@ sub clone_image {
 
 sub volume_resize {
     my ($class, $scfg, $storeid, $volname, $size, $running) = @_;
-    log_and_die "volume_resize: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, size => $size, running => $running});
 
 
-    sp_vol_update("$volname", $size, 0);
+    my ($vol, undef) = sp_decode_volsnap_to_tags($volname);
+    sp_vol_update($vol->{'globalId'}, $size, 0);
     
     return 1;
 }
