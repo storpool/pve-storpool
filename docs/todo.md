@@ -14,7 +14,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## High priority
 
-- `activate_storage()`: require that the template already exists instead of trying to create it
 
 ## Medium priority
 
@@ -23,9 +22,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## Low priority
 
-- `sp_temp_create()`: only ignore "this template already exists" errors
-  (this may go away if `activate_storage()` is changed to only check for
-  a preexisting template)
 - `list_volumes()`, `sp_encode_volsnap()`, `parse_volname()`, `volume_size_info()`:
   figure out whether we ever need to store non-raw volumes.
   Either we will need that to store cloud-init files, or we will need to figure out
