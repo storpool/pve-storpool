@@ -22,8 +22,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 - `status()`: this should probably be changed, it processes the output of `disk list` now,
   which was the old way of doing things; should we use `template status` in some way instead?
-- `sp_clean_snaps()`: figure out how to do that with global IDs and tags.
-  It ought to be straightforward.
 
 ## Low priority
 
