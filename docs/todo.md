@@ -15,8 +15,6 @@ SPDX-License-Identifier: BSD-2-Clause
 ## High priority
 
 - `activate_storage()`: require that the template already exists instead of trying to create it
-- get the test cluster name from the storage configuration or use the StorPool
-  cluster ID or something
 
 ## Medium priority
 
