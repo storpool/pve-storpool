@@ -29,6 +29,8 @@ use constant {
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
     VTAG_COMMENT => 'pve-comment',
+    VTAG_SNAP => 'pve-snapshot',
+    VTAG_SNAP_PARENT => 'pve-snapshot-parent',
 
     VTAG_V_PVE => 'pve',
 };
@@ -395,29 +397,35 @@ sub sp_placementgroup_list($) {
 	return $res;
 }
 
-# Delete all snapshot that are parents of the volume provided
-# We do this the simplest way, by parsing info in the names
-sub sp_clean_snaps($) {
-        # TODO: pp: figure out how to do this with global IDs and tags
-        return;
+sub sp_vol_revert_to_snapshot($$) {
+    my ($vol_id, $snap_id) = @_;
 
-	my ($volname) = @_;
-	my @snaps = map { $_->{"name"} } @{sp_snap_list()->{"data"}};
-	my $vmid = undef;
-	my $diskid = undef;
-	if ($volname =~ m/vm-(\d+)-\S+-(\d+)/){
-		$vmid = $1;
-		$diskid = $2;
-	}else{
-		return;
-	}
-	
-	foreach my $snap (@snaps) {
-		if ($snap =~ m/^snap-$vmid-disk-$diskid-\S+/){
-			sp_snap_del($snap, 0);
-			
-		}
-	}
+    my $req = { 'toSnapshot' => "~$snap_id" };
+    my $res = sp_post("VolumeRevert/~$vol_id", $req);
+
+    die "Storpool: ".$res->{'error'}->{'descr'} if $res->{'error'};
+    return $res
+}
+
+sub sp_volume_find_snapshots($$$) {
+    my ($storeid, $vol, $snap) = @_;
+
+    grep {
+        sp_vol_tag_is($_, VTAG_VIRT, VTAG_V_PVE) &&
+        sp_vol_tag_is($_, VTAG_CLUSTER, OUR_CLUSTER) &&
+        $_->{'templateName'} eq $storeid &&
+        sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
+        (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
+    } @{sp_snap_list()->{'data'}}
+}
+
+# Delete all snapshot that are parents of the volume provided
+sub sp_clean_snaps($$) {
+    my ($storeid, $vol) = @_;
+
+    for my $snap_obj (sp_volume_find_snapshots($storeid, $vol, undef)) {
+        sp_snap_del($snap_obj->{'globalId'}, 0);
+    }
 }
 
 # Various name encoding helpers and utility functions
@@ -500,6 +508,14 @@ sub sp_encode_volsnap_from_tags($) {
             'c',
             $vol->{'tags'}->{VTAG_COMMENT()} // '',
         ],
+        [
+            's',
+            $vol->{'tags'}->{VTAG_SNAP()} // '',
+        ],
+        [
+            'P',
+            $vol->{'tags'}->{VTAG_SNAP_PARENT()} // '',
+        ],
         # TODO: pp: 'f' for a format other than "raw"
     ])
 }
@@ -558,6 +574,8 @@ sub sp_decode_volsnap_to_tags($) {
             VTAG_VM() => sp_s($pairs{'v'}),
             VTAG_BASE() => $pairs{'B'} // '0',
             VTAG_COMMENT() => sp_s($pairs{'c'}),
+            VTAG_SNAP() => sp_s($pairs{'s'}),
+            VTAG_SNAP_PARENT() => sp_s($pairs{'P'}),
         },
     };
 }
@@ -838,7 +856,7 @@ sub free_image {
         sp_snap_del($global_id, 0);
     } else {
         sp_vol_del($global_id, 0);
-        sp_clean_snaps($global_id);
+        sp_clean_snaps($storeid, $vol);
     }
     
     return undef;
@@ -1038,42 +1056,47 @@ sub check_connection {
 
 sub volume_snapshot {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
-    log_and_die "volume_snapshot: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap, running => $running});
 
-    # We don't care if the machine is running, we can still do snapshots
-    #return 1 if $running;
-    my $snapname = $volname;
-    $snapname =~ s/^vm-/snap-/;
-    
-    my $res = sp_vol_snapshot("$volname", "$snapname-$snap", 0);
+    my $vol = sp_decode_volsnap_to_tags($volname);
+    sp_vol_snapshot($vol->{'globalId'}, 0, {
+        VTAG_VIRT() => VTAG_V_PVE,
+        VTAG_CLUSTER() => OUR_CLUSTER,
+        %{$vol->{tags}},
+        VTAG_SNAP() => $snap,
+        VTAG_SNAP_PARENT() => $vol->{'globalId'},
+    });
 
     return undef;
 }
 
 sub volume_snapshot_delete {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
-    log_and_die "volume_snapshot_delete: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap, running => $running});
 
-    return 1 if $running;
-    my $snapname = $volname;
-    $snapname =~ s/^vm-/snap-/;
+    my $vol = sp_decode_volsnap_to_tags($volname);
+    for my $snap_obj (sp_volume_find_snapshots($storeid, $vol, $snap)) {
+        sp_snap_del($snap_obj->{'globalId'}, 0);
+    }
 
-    my $res = sp_snap_del("$snapname-$snap", 0);
     return undef;
 }
 
 sub volume_snapshot_rollback {
     my ($class, $scfg, $storeid, $volname, $snap) = @_;
-    log_and_die "volume_snapshot_rollback: args: ".Dumper({class => $class, scfg => $scfg, storeid => $storeid, volname => $volname, snap => $snap});
 
-    my $snapname = $volname;
-    $snapname =~ s/^vm-/snap-/;
-    
-    my $res = sp_vol_del("$volname", 0);
-    
-    my $res2 = sp_vol_create_from_snap("$volname", $storeid, "$snapname-$snap", 0);
+    my $vol = sp_decode_volsnap_to_tags($volname);
+    my @found = sp_volume_find_snapshots($storeid, $vol, $snap);
+    if (@found != 1) {
+        log_and_die "volume_snapshot_rollback: expected exactly one '$snap' snapshot for $vol->{globalId}, got ".Dumper(\@found);
+    }
+
+    my $snap_obj = $found[0];
+    sp_vol_revert_to_snapshot($vol->{'globalId'}, $snap_obj->{'globalId'});
     
     return undef;
+}
+
+sub volume_snapshot_needs_fsfreeze {
+    return 1;
 }
 
 sub get_subdir {
