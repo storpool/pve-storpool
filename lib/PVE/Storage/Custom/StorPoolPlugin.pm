@@ -182,13 +182,33 @@ sub sp_vol_list() {
 }
 
 sub sp_vol_info($) {
-	my ($volname) = @_;
+	my ($global_id) = @_;
 	
-	my $res = sp_get("Volume/$volname");
+	my $res = sp_get("Volume/~$global_id");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
 	return $res;
+}
+
+sub sp_vol_info_single($) {
+    my ($global_id) = @_;
+
+    my $res = sp_vol_info($global_id);
+    if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
+        log_and_die("Internal StorPool error: expected exactly one volume with the $global_id global ID, got ".Dumper($res));
+    }
+    $res->{'data'}->[0]
+}
+
+sub sp_snap_info_single($) {
+    my ($global_id) = @_;
+
+    my $res = sp_snap_info($global_id);
+    if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
+        log_and_die("Internal StorPool error: expected exactly one snapshot with the $global_id global ID, got ".Dumper($res));
+    }
+    $res->{'data'}->[0]
 }
 
 sub sp_snap_list() {
@@ -211,7 +231,7 @@ sub sp_attach_list() {
 sub sp_snap_info($) {
 	my ($snapname) = @_;
 	
-	my $res = sp_get("Snapshot/$snapname");
+	my $res = sp_get("Snapshot/~$snapname");
 	#use Devel::StackTrace;
 	#my $trace = Devel::StackTrace->new;
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
@@ -716,12 +736,8 @@ sub alloc_image {
             log_and_die 'StorPool internal error: no globalId in the VolumeCreate API response: '.Dumper($c_res);
         }
 
-        my $vol_res = sp_vol_info("~$global_id");
-        my $vol_data = $vol_res->{'data'};
-        if (!defined($vol_data) || ref($vol_data) ne 'ARRAY' || @{$vol_data} != 1) {
-            log_and_die 'StorPool internal error: volinfo for a just-created volume returned '.Dumper($vol_res);
-        }
-        sp_encode_volsnap_from_tags($vol_data->[0], undef);
+        my $vol = sp_vol_info_single($global_id);
+        sp_encode_volsnap_from_tags($vol, undef);
 }
 
 # Status of the space of the storage
@@ -775,8 +791,8 @@ sub parse_volname ($) {
     my ($basename, $baseid);
     if (defined($parent)) {
         my $vinfo = $parent->{snapshot}
-            ? sp_snap_info('~'.$parent->{'globalId'})
-            : sp_vol_info('~'.$parent->{'globalId'});
+            ? sp_snap_info($parent->{'globalId'})
+            : sp_vol_info($parent->{'globalId'});
         if (@{$vinfo->{'data'}}) {
             $basename = $vinfo->{'data'}->[0]->{'globalId'};
             $baseid = $vinfo->{'data'}->[0]->{'tags'}->{VTAG_VM()};
@@ -992,8 +1008,10 @@ sub create_base {
     # sp_vol_freeze("$newname", 0);
 
     my $current_tags = (
-        $vol->{'snapshot'} ? sp_snap_info('~'.$vol->{'globalId'}) : sp_vol_info('~'.$vol->{'globalId'})
-    )->{'data'}->[0]->{'tags'} // {};
+        $vol->{'snapshot'}
+            ? sp_snap_info_single($vol->{'globalId'})
+            : sp_vol_info_single($vol->{'globalId'})
+    )->{'tags'} // {};
 
     my $snap_res = sp_vol_snapshot($global_id, 0, {
         %{$current_tags},
@@ -1001,15 +1019,12 @@ sub create_base {
     });
 
     my $snap_id = $snap_res->{'data'}->{'snapshotGlobalId'};
-    my $snap = sp_snap_info("~$snap_id");
-    if (!defined($snap->{'data'}) || ref($snap->{'data'}) ne 'ARRAY' || @{$snap->{'data'}} != 1) {
-        log_and_die "Internal StorPool error: bad info for the just-created snapshot $snap_id: ".Dumper($snap);
-    }
+    my $snap = sp_snap_info_single($snap_id);
 
     sp_vol_detach($global_id, 'all', 0);
     sp_vol_del($global_id, 0);
 
-    return sp_encode_volsnap_from_tags($snap->{'data'}->[0], $parent);
+    return sp_encode_volsnap_from_tags($snap, $parent);
 }
 
 sub clone_image {
@@ -1029,16 +1044,18 @@ sub clone_image {
     die "clone_image only works on base images\n" if !$isBase;
 
     my $current_tags = (
-        $vol->{'snapshot'} ? sp_snap_info('~'.$vol->{'globalId'}) : sp_vol_info('~'.$vol->{'globalId'})
-    )->{'data'}->[0]->{'tags'} // {};
+        $vol->{'snapshot'}
+            ? sp_snap_info_single($vol->{'globalId'})
+            : sp_vol_info_single($vol->{'globalId'})
+    )->{'tags'} // {};
 
     my $c_res = sp_vol_from_snapshot($global_id, 0, {
         %{$current_tags},
         VTAG_BASE() => '0',
         VTAG_VM() => "$vmid",
     });
-    my $newvol = sp_vol_info('~'.$c_res->{'data'}->{'globalId'});
-    return sp_encode_volsnap_from_tags($newvol->{'data'}->[0], $vol);
+    my $newvol = sp_vol_info_single($c_res->{'data'}->{'globalId'});
+    return sp_encode_volsnap_from_tags($newvol, $vol);
 }
 
 sub volume_resize {
