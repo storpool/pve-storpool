@@ -804,7 +804,7 @@ sub volume_has_feature {
 
     my $features = {
 	snapshot => { current => 1, snap => 1 },
-	clone => { base => 1 },
+	clone => { base => 1, snap => 1 },
 	template => { current => 1 },
 	copy => { base => 1,
 		  current => 1,
@@ -942,6 +942,16 @@ sub clone_image {
     my $cfg = sp_cfg($scfg, $storeid);
 
     my $vol = sp_decode_volsnap_to_tags($volname);
+    if ($snap) {
+        my @found = sp_volume_find_snapshots($cfg, $vol, $snap);
+        if (@found != 1) {
+            log_and_die "Expected exactly one StorPool snapshot for $vol / $snap, got ".Dumper(\@found);
+        }
+
+        # OK, let's go wild...
+        $vol = $found[0];
+    }
+
     my ($global_id, $vtype, $isBase) = (
         $vol->{'globalId'},
         $vol->{'tags'}->{VTAG_TYPE()},
@@ -950,15 +960,9 @@ sub clone_image {
 
     die "clone_image on wrong vtype '$vtype'\n" if $vtype ne 'images';
 
-    die "this storage type does not support clone_image on snapshot\n" if $snap; #TODO investigate what $snap means. Possibly the base contains snapshots, which under normal operation is not possible
+    die "clone_image only works on StorPool snapshots\n" if !$vol->{'snapshot'};
 
-    die "clone_image only works on base images\n" if !$isBase;
-
-    my $current_tags = (
-        $vol->{'snapshot'}
-            ? sp_snap_info_single($cfg, $vol->{'globalId'})
-            : sp_vol_info_single($cfg, $vol->{'globalId'})
-    )->{'tags'} // {};
+    my $current_tags = sp_snap_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
 
     my $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, {
         %{$current_tags},
