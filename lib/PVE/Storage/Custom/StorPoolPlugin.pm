@@ -403,9 +403,9 @@ sub sp_encode_single($) {
     }
     $value //= '';
 
-    if (index($value, '-') != -1) {
-        log_and_die 'FIXME-TODO: sp_encode_single: encode a dash: '.Dumper($pair);
-    }
+    # Encode some special characters; for the present, dashes only.
+    $value =~ s/-/--/g;
+
     "$key$value"
 }
 
@@ -462,15 +462,31 @@ sub sp_decode_single($) {
     if (!defined($part) || $part eq '') {
         log_and_die 'Internal error: sp_decode_single: got part '.Dumper(\$part);
     }
+
+    # Make sure there is a sensible number of dashes in there...
+    if ($part =~ /(?: ^ | [^-] ) - (?: -- )* (?: $ | [^-] )/x) {
+        log_and_die 'FIXME-TODO: decode an odd number of dashes: '.Dumper(\$part);
+    }
+    # ...and then decode them.
+    $part =~ s/--/-/g;
+
     split //, $part, 2
 }
 
 sub sp_decode_list($) {
     my ($raw) = @_;
-    if (index($raw, '--') != -1) {
-        log_and_die 'FIXME-TODO: decode dashes: '.Dumper(\$raw);
+
+    # Split on dashes, but ignore double dashes.
+    my @parts;
+    while ($raw =~ /^ (?P<first> (?: [^-] | -- )+ ) (?: - (?P<rest> .* ) )? $/x) {
+        push @parts, $+{'first'};
+        $raw = $+{'rest'};
+        last unless defined $raw;
     }
-    my @parts = split /-/, $raw;
+    if ($raw) {
+        log_and_die "FIXME-TODO: sp_decode_list: leftover ".Dumper(\$raw);
+    }
+
     map { sp_decode_single($_) } @parts
 }
 
