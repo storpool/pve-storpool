@@ -8,6 +8,7 @@ use warnings;
 use Carp qw(croak);
 use Data::Dumper;
 use File::Path;
+use PVE::Storage;
 use PVE::Storage::Plugin;
 use PVE::JSONSchema qw(get_standard_option);
 use Sys::Hostname;
@@ -567,7 +568,44 @@ sub sp_decode_volsnap_to_tags($) {
 # Configuration
 
 sub api {
-    return 10;
+    my $minver = 3;
+    my $maxver = 10;
+
+    my $apiver;
+    eval {
+        $apiver = PVE::Storage::APIVER;
+    };
+    if ($@) {
+        # Argh, they don't even declare APIVER? Well... too bad.
+        return $minver;
+    }
+
+    my $apiage;
+    eval {
+        $apiage = PVE::Storage::APIAGE;
+    };
+    if ($@) {
+        # Hm, no APIAGE? OK, is their version within our range?
+        if ($apiver >= $minver && $apiver <= $maxver) {
+            return $apiver;
+        }
+
+        # Ah well...
+        return $minver;
+    }
+
+    # Is our version within their declared supported range?
+    if ($apiver >= $maxver && $apiver <= $maxver + $apiage) {
+        return $maxver;
+    }
+
+    # This is a bit of a lie, but, well...
+    if ($apiver <= $maxver) {
+        return $apiver;
+    }
+
+    # Oof. This is fun.
+    return $minver;
 }
 
 # This is the most important method. The ID of the plugin
