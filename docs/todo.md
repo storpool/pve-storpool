@@ -24,9 +24,7 @@ SPDX-License-Identifier: BSD-2-Clause
 
 - `list_volumes()`, `sp_encode_volsnap()`, `parse_volname()`, `volume_size_info()`:
   figure out whether we ever need to store non-raw volumes.
-  Either we will need that to store cloud-init files, or we will need to figure out
-  what kind of capability (feature) we are missing so we can store raw cloud-init
-  files onto StorPool volumes.
+  We will need that to store cloud-init files.
 - `list_volumes()`: apply the images/rootdir fix
 
 ## Driver functions/methods to reenable/revamp
