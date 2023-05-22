@@ -650,6 +650,18 @@ sub activate_storage {
     sp_temp_create($cfg, $storeid, 3, "hdd", "hdd", 1);
 }
 
+sub sp_get_tags($) {
+    my ($cfg) = @_;
+
+    my $extra_spec = $cfg->{'scfg'}->{'sp-extra-tags'} // '';
+    my %extra_tags = map { split /=/, $_, 2 } split /\s+/, $extra_spec;
+    return (
+        VTAG_VIRT() => VTAG_V_PVE,
+        VTAG_CLUSTER() => $cfg->{'sp'}->{'SP_CLUSTER_NAME'},
+        %extra_tags,
+    );
+}
+
 # Create the volume
 sub alloc_image {
 	my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size) = @_;
@@ -664,8 +676,7 @@ sub alloc_image {
         }
 	
 	my $c_res = sp_vol_create($cfg, undef, $size, $storeid, 0, {
-            VTAG_VIRT() => VTAG_V_PVE,
-            VTAG_CLUSTER() => $cfg->{'sp'}->{'SP_CLUSTER_NAME'},
+            sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
             VTAG_FORMAT() => $fmt,
             (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
@@ -1002,9 +1013,8 @@ sub volume_snapshot {
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     sp_vol_snapshot($cfg, $vol->{'globalId'}, 0, {
-        VTAG_VIRT() => VTAG_V_PVE,
-        VTAG_CLUSTER() => $cfg->{'sp'}->{'SP_CLUSTER_NAME'},
         %{$vol->{tags}},
+        sp_get_tags($cfg),
         VTAG_SNAP() => $snap,
         VTAG_SNAP_PARENT() => $vol->{'globalId'},
     });
