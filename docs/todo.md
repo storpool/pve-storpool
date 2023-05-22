@@ -39,11 +39,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## Driver functions/methods to reenable/revamp
 
-- `volume_resize`
-- `sp_vol_create_from_snap`
 - `deactivate_storage`
-- `volume_snapshot`
-- `volume_snapshot_delete`
-- `volume_snapshot_rollback`
 - `get_subdir`
 - `delete_store`
