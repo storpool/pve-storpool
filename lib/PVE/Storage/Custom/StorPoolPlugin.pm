@@ -341,9 +341,8 @@ sub sp_vol_from_snapshot ($$;$) {
 
 # Currently only used for resize
 sub sp_vol_update ($$$) {
-	my ($global_id, $size, $ignoreError) = @_;
+	my ($global_id, $req, $ignoreError) = @_;
 	
-	my $req = { 'size' => $size };
 	my $res = sp_post("VolumeUpdate/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
@@ -861,6 +860,7 @@ sub volume_has_feature {
 	copy => { base => 1,
 		  current => 1,
 		  snap => 1 },
+        rename => { current => 1, },
     };
 
     my ($vtype, $name, $vmid, , undef, undef, $isBase) =
@@ -1022,7 +1022,7 @@ sub volume_resize {
 
 
     my $vol = sp_decode_volsnap_to_tags($volname);
-    sp_vol_update($vol->{'globalId'}, $size, 0);
+    sp_vol_update($vol->{'globalId'}, { 'size' => $size }, 0);
     
     return 1;
 }
@@ -1121,6 +1121,21 @@ sub delete_store {
                 }
                 sp_snap_del($snap->{'globalId'},0);
 	}
+}
+
+sub rename_volume($$$$$$) {
+    my ($class, $scfg, $storeid, $source_volname, $target_vmid, $target_volname) = @_;
+
+    my $vol = sp_decode_volsnap_to_tags($source_volname);
+    sp_vol_update($vol->{'globalId'}, {
+        'tags' => {
+            %{$vol->{'tags'}},
+            VTAG_VM() => $target_vmid,
+        },
+    }, 0);
+
+    my $updated = sp_vol_info_single($vol->{'globalId'});
+    "$storeid:".sp_encode_volsnap_from_tags($updated)
 }
 
 1;
