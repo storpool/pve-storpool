@@ -115,17 +115,6 @@ sub sp_vol_create($$$$$;$){
 	return $res
 }
 
-sub sp_temp_create($$$$$$){
-	my ($cfg, $name, $repl, $placeAll, $placeTail, $ignoreError) = @_;
-	
-	my $req = { 'replication' => $repl, 'name' => $name, 'placeAll' => $placeAll, 'placeTail' => $placeTail };
-	my $res = sp_post($cfg, "VolumeTemplateCreate", $req);
-	
-        # TODO: pp: only ignore "already exists" errors
-	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
-	return $res
-}
-
 sub sp_vol_status($) {
     my ($cfg) = @_;
 	
@@ -210,16 +199,6 @@ sub sp_disk_list($) {
     my ($cfg) = @_;
 	
 	my $res = sp_get($cfg, "DisksList");
-	
-	die $res->{'error'}->{'descr'} if ($res->{'error'});
-	
-	return $res;
-}
-
-sub sp_temp_list($) {
-    my ($cfg) = @_;
-	
-	my $res = sp_get($cfg, "VolumeTemplatesList");
 	
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	
@@ -661,9 +640,7 @@ sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     
-    # TODO: pp: discuss: change this to require that the template already exists?
-    #TODO should I check if already created rather than ignoring the error?
-    sp_temp_create($cfg, $storeid, 3, "hdd", "hdd", 1);
+    sp_temp_get($cfg, $storeid);
 }
 
 sub sp_get_tags($) {
