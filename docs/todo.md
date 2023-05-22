@@ -7,10 +7,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## Discuss with others, determine priority
 
-- `activate_storage()`: require that the template already exists instead of trying to create it
-  (we don't know what parameters to create it with, do we?)
-- `status()`: this should probably be changed, it processes the output of `disk list` now,
-  which was the old way of doing things; should we use `template status` in some way instead?
 - getting the cluster name from the storage configuration: who will make sure that
   all the definitions within the same Proxmox VE cluster actually have the same cluster name?
 - ask Johan whether they want to use the Proxmox VE backup server and, if needed, figure out
@@ -18,11 +14,14 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## High priority
 
+- `activate_storage()`: require that the template already exists instead of trying to create it
 - get the test cluster name from the storage configuration or use the StorPool
   cluster ID or something
 
 ## Medium priority
 
+- `status()`: this should probably be changed, it processes the output of `disk list` now,
+  which was the old way of doing things; should we use `template status` in some way instead?
 - `sp_clean_snaps()`: figure out how to do that with global IDs and tags.
   It ought to be straightforward.
 
