@@ -114,6 +114,17 @@ sub sp_vol_status($) {
 	return $res;
 }
 
+sub sp_volsnap_list($) {
+    my ($cfg) = @_;
+	
+	my $res = sp_get($cfg, "VolumesAndSnapshotsList");
+	
+	# If there is an error here it's fatal, we do not check.
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+	
+	return $res;
+}
+
 sub sp_vol_list($) {
     my ($cfg) = @_;
 	my $res = sp_get($cfg, "VolumesList");
@@ -927,10 +938,10 @@ sub list_volumes {
     my $cfg = sp_cfg($scfg, $storeid);
     my %ctypes = map { $_ => 1 } @{$content_types};
 
-    my $volStatus = sp_vol_status($cfg);
+    my $volStatus = sp_volsnap_list($cfg);
     my $res = [];
 
-    for my $vol (values %{$volStatus->{'data'}}) {
+    for my $vol (@{$volStatus->{'data'}->{'volumes'}}) {
         next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
             sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg));
         my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
