@@ -93,11 +93,8 @@ sub sp_request($$$){
 	}
 }
 
-sub sp_vol_create($$$$$;$){
-	my ($cfg, $name, $size, $template, $ignoreError, $tags) = @_;
-        if (defined($name) && $name) {
-            log_and_die 'FIXME-WIP: sp_vol_create: non-null name: '.Dumper({name => $name, size => $size, template => $template, ignoreError => $ignoreError});
-        }
+sub sp_vol_create($$$$;$){
+	my ($cfg, $size, $template, $ignoreError, $tags) = @_;
 	
 	my $req = { 'template' => $template, 'size' => $size, (defined($tags) ? (tags => $tags) : ()) };
 	my $res = sp_post($cfg, "VolumeCreate", $req);
@@ -739,7 +736,7 @@ sub alloc_image {
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
 	
-	my $c_res = sp_vol_create($cfg, undef, $size, sp_get_template($cfg), 0, {
+	my $c_res = sp_vol_create($cfg, $size, sp_get_template($cfg), 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
             (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
@@ -966,7 +963,7 @@ sub list_volumes {
 
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $vollist, $cache) = @_;
-    log_and_die 'FIXME-TODO: list_images: non-null vmid: '.Dumper({class => $class, storeid => $storeid, scfg => $scfg, vmid => $vmid, vollist => $vollist, cache => $cache}) if defined($vmid);
+    log_and_die "list_images(vmid=$vmid) not implemented yet" if defined($vmid);
     $class->list_volumes($storeid, $scfg, $vmid, [keys %{$scfg->{content}}])
 }
 
@@ -1070,7 +1067,7 @@ sub volume_resize {
 
 sub deactivate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
-    log_and_die "deactivate_storage: args: ".Dumper({class => $class, storeid => $storeid, scfg => $scfg, cache => $cache});
+    log_and_die "deactivate_storage($storeid) not implemented yet";
 
     #TODO this does NOT occur when deleteing a storage
     
@@ -1134,15 +1131,13 @@ sub volume_snapshot_needs_fsfreeze {
 
 sub get_subdir {
     my ($class, $scfg, $vtype) = @_;
-    log_and_die "get_subdir: args: ".Dumper({class => $class, scfg => $scfg, vtype => $vtype});
-	
-    return "/dev/storpool";
+    log_and_die "get_subdir($vtype) not implemented yet";
 }
 
 sub delete_store {
 	my ($class, $storeid) = @_;
         my $cfg = sp_cfg({}, $storeid);
-    log_and_die "delete_store: args: ".Dumper({class => $class, storeid => $storeid});
+    log_and_die "delete_store($storeid) not implemented yet";
 	my $vols_hash = sp_vol_list($cfg);
 	my $snaps_hash = sp_snap_list($cfg);
 	my $atts_hash = sp_attach_list($cfg);
