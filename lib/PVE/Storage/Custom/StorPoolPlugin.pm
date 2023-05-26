@@ -6,6 +6,7 @@ use strict;
 use warnings;
 
 use Carp qw(carp croak);
+use Config::IniFiles;
 use Data::Dumper;
 use File::Path;
 use PVE::Storage;
@@ -33,6 +34,9 @@ use constant {
     VTAG_SNAP_PARENT => 'pve-snapshot-parent',
 
     VTAG_V_PVE => 'pve',
+
+    CFG_FNAME_API => '/etc/pve/storpool/api.cfg',
+    CFG_FNAME_PROXMOX => '/etc/pve/storpool/proxmox.cfg',
 };
 
 my $SP_VERS = '1.0';
@@ -48,19 +52,6 @@ sub log_and_die($) {
 
     warn "FIXME-WIP: $msg\n";
     croak "FIXME-WIP: $msg\n";
-}
-
-# Get some storpool settings from storpool.conf
-sub sp_confget() {
-    my %res;
-    open my $f, '-|', 'storpool_confget' or log_and_die "Could not run storpool_confget: $!";
-    while (<$f>) {
-        chomp;
-        my ($var, $value) = split /=/, $_, 2;
-        $res{$var} = $value;
-    }
-    $res{'SP_URL'} = "http://$res{SP_API_HTTP_HOST}:$res{SP_API_HTTP_PORT}/ctrl/$SP_VERS/";
-    return %res;
 }
 
 # Wrapper functions for the actual request
@@ -84,9 +75,9 @@ sub sp_request($$$){
 	return undef if ( ${^GLOBAL_PHASE} eq 'START' );
 
 	my $h = HTTP::Headers->new;
-	$h->header('Authorization' => 'Storpool v1:'.$cfg->{sp}->{'SP_AUTH_TOKEN'});
+	$h->header('Authorization' => 'Storpool v1:'.$cfg->{'api'}->{'auth_token'});
 	
-	my $p = HTTP::Request->new($method, $cfg->{'sp'}->{'SP_URL'}.$addr, $h);
+	my $p = HTTP::Request->new($method, $cfg->{'api'}->{'url'}.$addr, $h);
 	$p->content( encode_json( $params ) ) if defined( $params );
 	
 	my $ua = new LWP::UserAgent;
@@ -337,7 +328,7 @@ sub sp_volume_find_snapshots($$$) {
 
     grep {
         sp_vol_tag_is($_, VTAG_VIRT, VTAG_V_PVE) &&
-        sp_vol_tag_is($_, VTAG_CLUSTER, $cfg->{'sp'}->{'SP_CLUSTER_NAME'}) &&
+        sp_vol_tag_is($_, VTAG_CLUSTER, sp_get_cluster_name($cfg)) &&
         $_->{'templateName'} eq $cfg->{'storeid'} &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
@@ -521,14 +512,71 @@ sub sp_decode_volsnap_to_tags($) {
     };
 }
 
+sub cfg_format_version($) {
+    my ($raw) = @_;
+    my $sect = $raw->{'format.version'};
+    if (!defined $sect || ref $sect ne 'HASH') {
+        die "No [$sect] section\n";
+    }
+    my ($major, $minor) = ($sect->{'major'}, $sect->{'minor'});
+    if (!defined $major || !defined $minor) {
+        die "Both $sect.major and $sect.minor must be defined\n";
+    }
+    if ($major !~ /^0 | (?: [1-9] [0-9]* )$/x || $minor !~ /^0 | (?: [1-9][0-9]* )$/x) {
+        die "Both $sect.major and $sect.minor must be non-negative decimal numbers\n";
+    }
+    return ($major, $minor);
+}
+
+sub cfg_load_fmtver($ $ $) {
+    my ($fname, $major, $minor) = @_;
+
+    my %raw;
+    tie %raw, 'Config::IniFiles', (
+        -file => $fname,
+        -allowcontinue => 1,
+    ) or die "Could not read the $fname file: $@\n";
+    my @fmtver;
+    eval {
+        @fmtver = cfg_format_version(\%raw);
+    };
+    if ($@) {
+        my $msg = $@;
+        die "The format version check failed for the $fname file: $msg\n";
+    };
+    if ($fmtver[0] != $major || $fmtver[1] != $minor) {
+        die "Only format version 0.1 supported for the present for the $fname file\n";
+    }
+    return %raw;
+}
+
+sub cfg_parse_api() {
+    my %raw = cfg_load_fmtver(CFG_FNAME_API, 0, 1);
+    my ($host, $port) = ($raw{'api'}->{'host'}, $raw{'api'}->{'port'});
+    return {
+        'auth_token' => $raw{'api'}->{'auth_token'},
+        'ourid' => $raw{'api'}->{'ourid'},
+        'url' => "http://$host:$port/ctrl/$SP_VERS/",
+    };
+}
+
+sub cfg_parse_proxmox() {
+    my %raw = cfg_load_fmtver(CFG_FNAME_PROXMOX, 0, 1);
+    return {
+        'id' => {
+            'name' => $raw{'id'}->{'name'},
+        },
+    };
+}
+
 sub sp_cfg($$) {
     my ($scfg, $storeid) = @_;
 
-    my %sp = sp_confget();
     return {
+        'api' => cfg_parse_api(),
+        'proxmox' => cfg_parse_proxmox(),
         'storeid' => $storeid,
         'scfg' => $scfg,
-        'sp' => \%sp,
     };
 }
 
@@ -660,9 +708,15 @@ sub sp_get_tags($) {
     my %extra_tags = map { split /=/, $_, 2 } split /\s+/, $extra_spec;
     return (
         VTAG_VIRT() => VTAG_V_PVE,
-        VTAG_CLUSTER() => $cfg->{'sp'}->{'SP_CLUSTER_NAME'},
+        VTAG_CLUSTER() => sp_get_cluster_name($cfg),
         %extra_tags,
     );
+}
+
+sub sp_get_cluster_name($) {
+    my ($cfg) = @_;
+
+    return $cfg->{'proxmox'}->{'id'}->{'name'};
 }
 
 # Create the volume
@@ -771,7 +825,7 @@ sub activate_volume {
     my $perms = $vol->{'snapshot'} ? 'ro' : 'rw';
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_vol_attach($cfg, $global_id, $cfg->{'sp'}->{'SP_OURID'}, $perms, 0, $vol->{'snapshot'});
+    sp_vol_attach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, $perms, 0, $vol->{'snapshot'});
     log_and_die "Internal StorPool error: could not find the just-attached volume $global_id at $path" unless -e $path;
 }
 
@@ -787,7 +841,7 @@ sub deactivate_volume {
     my $global_id = $vol->{'globalId'};
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_vol_detach($cfg, $global_id, $cfg->{'sp'}->{'SP_OURID'}, 0, $vol->{'snapshot'});
+    sp_vol_detach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, 0, $vol->{'snapshot'});
 }
 
 sub free_image {
@@ -871,7 +925,7 @@ sub list_volumes {
 
     for my $vol (values %{$volStatus->{'data'}}) {
         next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
-            sp_vol_tag_is($vol, VTAG_CLUSTER, $cfg->{'sp'}->{'SP_CLUSTER_NAME'});
+            sp_vol_tag_is($vol, VTAG_CLUSTER, sp_get_cluster_name($cfg));
         my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
         next unless defined($v_type) && exists $ctypes{$v_type};
         my $v_template = $vol->{templateName} // '';
@@ -1087,7 +1141,7 @@ sub delete_store {
 
 	foreach my $vol (@{$vols_hash->{data}}){
                 next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
-                    sp_vol_tag_is($vol, VTAG_CLUSTER, $cfg->{'sp'}->{'SP_CLUSTER_NAME'});
+                    sp_vol_tag_is($vol, VTAG_CLUSTER, sp_get_cluster_name($cfg));
                 next unless $vol->{'templateName'} eq $storeid;
                 if ($attachments{$vol->{'name'}}) {
                         sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
@@ -1097,7 +1151,7 @@ sub delete_store {
 
 	foreach my $snap (@{$snaps_hash->{data}}){
                 next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) &&
-                    sp_vol_tag_is($snap, VTAG_CLUSTER, $cfg->{'sp'}->{'SP_CLUSTER_NAME'});
+                    sp_vol_tag_is($snap, VTAG_CLUSTER, sp_get_cluster_name($cfg));
                 next unless $snap->{'templateName'} eq $storeid;
                 if ($attachments{$snap->{'name'}}) {
                         sp_vol_detach($snap->{'globalId'}, 'all', 0, 1);
