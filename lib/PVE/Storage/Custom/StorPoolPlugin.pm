@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: StorPool <support@storpool.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 package PVE::Storage::Custom::StorPoolPlugin;
 
 use v5.16;
