@@ -26,6 +26,7 @@ use base qw(PVE::Storage::Plugin);
 use constant {
     VTAG_VIRT => 'virt',
     VTAG_LOC => 'pve-loc',
+    VTAG_STORE => 'pve',
     VTAG_TYPE => 'pve-type',
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
@@ -336,7 +337,7 @@ sub sp_is_ours($$) {
 
     sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
     sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) &&
-    $vol->{'templateName'} eq $cfg->{'storeid'}
+    sp_vol_tag_is($vol, VTAG_STORE, $cfg->{'storeid'})
 }
 
 sub sp_volume_find_snapshots($$$) {
@@ -728,6 +729,7 @@ sub sp_get_tags($) {
     return (
         VTAG_VIRT() => VTAG_V_PVE,
         VTAG_LOC() => sp_get_loc_name($cfg),
+        VTAG_STORE() => $cfg->{'storeid'},
         %extra_tags,
     );
 }
