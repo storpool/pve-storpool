@@ -599,7 +599,7 @@ sub plugindata {
 sub properties {
 
     return {
-	'sp-extra-tags' => {
+	'extra-tags' => {
 	    description => 'Additional tags to add to the StorPool volumes and snapshots',
 	    type => 'string',
 	},
@@ -616,7 +616,7 @@ sub options {
         maxfiles => { optional => 1 },
 	content => { optional => 1 },
 	format => { optional => 1 },
-	'sp-extra-tags' => { optional => 1 },
+	'extra-tags' => { optional => 1 },
    };
 }
 
@@ -656,7 +656,7 @@ sub activate_storage {
 sub sp_get_tags($) {
     my ($cfg) = @_;
 
-    my $extra_spec = $cfg->{'scfg'}->{'sp-extra-tags'} // '';
+    my $extra_spec = $cfg->{'scfg'}->{'extra-tags'} // '';
     my %extra_tags = map { split /=/, $_, 2 } split /\s+/, $extra_spec;
     return (
         VTAG_VIRT() => VTAG_V_PVE,
