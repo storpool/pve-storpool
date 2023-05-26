@@ -32,9 +32,11 @@ depending on whether the property is marked as nullable.
 ## Volume and snapshot tags
 
 - `virt`: string: the constant string "pve"
-- `pve-cluster`: string: the short name ("slug") of the Proxmox VE cluster to distinguish
+- `pve-loc`: string: the short name ("slug") of the Proxmox VE cluster to distinguish
    volumes defined on it from ones defined for other Proxmox VE clusters sharing the same
    StorPool deployment
+- `pve`: string: the storage-id of the Proxmox storage that this volume or snapshot
+  belongs to
 - `pve-type`: string: the content type of the Proxmox VE object stored in this volume or
   snapshot, e.g. "images", "iso", etc.
 - `pve-vm`: integer: the ID of the Proxmox VE virtual machine that this object belongs to
