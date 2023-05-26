@@ -22,8 +22,9 @@ use LWP::Simple;
 
 use base qw(PVE::Storage::Plugin);
 
-my ($RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
+my ($RE_DISK_ID, $RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
 BEGIN {
+    $RE_DISK_ID = '(?: 0 | [1-9[0-9]* )';
     $RE_GLOBAL_ID = '[a-z0-9]+ \. [a-z0-9+] \. [a-z0-9]+';
     $RE_PROXMOX_ID = '[a-z] [a-z0-9_.-]* [a-z0-9]';
     $RE_VM_ID = '[1-9][0-9]*';
@@ -36,6 +37,7 @@ use constant {
     VTAG_STORE => 'pve',
     VTAG_TYPE => 'pve-type',
     VTAG_VM => 'pve-vm',
+    VTAG_DISK => 'pve-disk',
     VTAG_BASE => 'pve-base',
     VTAG_COMMENT => 'pve-comment',
     VTAG_SNAP => 'pve-snap',
@@ -65,8 +67,18 @@ use constant {
         ^
         snap
         - (?P<vm_id> $RE_VM_ID )
+        -disk- (?P<disk_id> $RE_DISK_ID )
         - (?P<snapshot> $RE_PROXMOX_ID )
         -p- (?P<parent_id> $RE_GLOBAL_ID )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .raw
+        $
+    }x,
+    RE_VOLNAME_BASE => qr{
+        ^
+        base
+        - (?P<vm_id> $RE_VM_ID )
+        -disk- (?P<disk_id> $RE_DISK_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
         .raw
         $
@@ -75,6 +87,7 @@ use constant {
         ^
         vm
         - (?P<vm_id> $RE_VM_ID )
+        -disk- (?P<disk_id> $RE_DISK_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
         .raw
         $
@@ -373,12 +386,12 @@ sub sp_vol_revert_to_snapshot($$$) {
     return $res
 }
 
-sub sp_is_ours($$) {
-    my ($cfg, $vol) = @_;
+sub sp_is_ours($$%) {
+    my ($cfg, $vol, %named) = @_;
 
     sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
     sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) &&
-    sp_vol_tag_is($vol, VTAG_STORE, $cfg->{'storeid'})
+    ($named{'any_storage'} || sp_vol_tag_is($vol, VTAG_STORE, $cfg->{'storeid'}))
 }
 
 sub sp_volume_find_snapshots($$$) {
@@ -426,14 +439,26 @@ sub sp_type_is_image($) {
     $type eq 'images' || $type eq 'rootdir'
 }
 
+sub sp_is_empty($) {
+    my ($value) = @_;
+
+    if (!defined $value) {
+        return 1;
+    }
+    if ($value eq '') {
+        return 1;
+    }
+    return 0;
+}
+
 sub sp_encode_volsnap_from_tags($) {
     my ($vol) = @_;
 
     if ($vol->{'tags'}->{VTAG_TYPE()} eq 'iso') {
-        if ($vol->{'tags'}->{VTAG_VM()} ||
-            $vol->{'tags'}->{VTAG_BASE()} ||
-            $vol->{'tags'}->{VTAG_SNAP()} ||
-            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+        if (!sp_is_empty($vol->{'tags'}->{VTAG_VM()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_BASE()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
             log_and_die 'An ISO image should not have the VM, base, snapshot, or snapshot parent tags: '.
                 Dumper($vol);
         }
@@ -449,9 +474,9 @@ sub sp_encode_volsnap_from_tags($) {
     }
 
     if (!defined $vol->{'tags'}->{VTAG_VM()}) {
-        if ($vol->{'tags'}->{VTAG_BASE()} ||
-            $vol->{'tags'}->{VTAG_SNAP()} ||
-            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+        if (!sp_is_empty($vol->{'tags'}->{VTAG_BASE()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
             log_and_die 'A freestanding image should not have the base, snapshot, or snapshot parent tags: '.
                 Dumper($vol);
         }
@@ -463,31 +488,47 @@ sub sp_encode_volsnap_from_tags($) {
     }
 
     if ($vol->{'tags'}->{VTAG_BASE()}) {
-        if ($vol->{'tags'}->{VTAG_SNAP()} ||
-            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+        if (!sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
+            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
             log_and_die 'A base disk image should not have the snapshot or snapshot parent tags: '.
                 Dumper($vol);
         }
         if (!$vol->{'snapshot'}) {
             log_and_die 'A base disk image should be a StorPool snapshot: '.Dumper($vol);
         }
+        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+            log_and_die 'A base disk image should specify a disk: '.Dumper($vol);
+        }
 
-        return 'base-'.$vol->{'tags'}->{VTAG_VM()}.'-sp-'.$vol->{'globalId'}.'.raw';
+        return 'base-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
+            '-sp-'.$vol->{'globalId'}.'.raw';
     }
 
     if ($vol->{'tags'}->{VTAG_SNAP()}) {
-        if (!$vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+        if (!$vol->{'snapshot'}) {
+            log_and_die 'A disk snapshot should be a StorPool snapshot: '.Dumper($vol);
+        }
+        if (sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
             log_and_die 'A disk snapshot should have the snapshot parent tag: '.Dumper($vol);
         }
-        if (!$vol->{'snapshot'}) {
-            log_and_die 'A base disk image should be a StorPool snapshot: '.Dumper($vol);
+        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+            log_and_die 'A disk snapshot should specify a disk: '.Dumper($vol);
         }
 
-        return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-'.$vol->{'tags'}->{VTAG_SNAP()}.
-            '-p-'.$vol->{'tags'}->{VTAG_SNAP_PARENT()}.'-sp-'.$vol->{'globalId'}.'.raw';
+        return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
+            '-'.$vol->{'tags'}->{VTAG_SNAP()}.'-p-'.$vol->{'tags'}->{VTAG_SNAP_PARENT()}.
+            '-sp-'.$vol->{'globalId'}.'.raw';
     }
 
-    return 'vm-'.$vol->{'tags'}->{VTAG_VM()}.'-sp-'.$vol->{'globalId'}.'.raw';
+    if ($vol->{'snapshot'}) {
+        log_and_die 'A disk image should be a StorPool volume: '.Dumper($vol);
+    }
+    if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+        log_and_die 'A disk image should specify a disk: '.Dumper($vol);
+    }
+
+    return 'vm-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
+        '-sp-'.$vol->{'globalId'}.'.raw';
 }
 
 sub sp_decode_volsnap_to_tags($) {
@@ -518,27 +559,43 @@ sub sp_decode_volsnap_to_tags($) {
     }
 
     if ($volname =~ RE_VOLNAME_SNAPSHOT) {
-        my ($global_id, $parent_id, $snapshot, $vm_id) = ($+{'global_id'}, $+{'parent_id'}, $+{'snapshot'}, $+{'vm_id'});
+        my ($disk_id, $global_id, $parent_id, $snapshot, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'parent_id'}, $+{'snapshot'}, $+{'vm_id'});
         return {
             'snapshot' => JSON::true,
             'globalId' => $global_id,
             'tags' => {
                 VTAG_TYPE() => 'images',
                 VTAG_VM() => $vm_id,
+                VTAG_DISK() => $disk_id,
                 VTAG_SNAP() => $snapshot,
                 VTAG_SNAP_PARENT() => $parent_id,
             },
         };
     }
 
+    if ($volname =~ RE_VOLNAME_BASE) {
+        my ($disk_id, $global_id, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'vm_id'});
+        return {
+            'snapshot' => JSON::true,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'images',
+                VTAG_VM() => $vm_id,
+                VTAG_DISK() => $disk_id,
+                VTAG_BASE() => JSON::true,
+            },
+        };
+    }
+
     if ($volname =~ RE_VOLNAME_DISK) {
-        my ($global_id, $vm_id) = ($+{'global_id'}, $+{'vm_id'});
+        my ($disk_id, $global_id, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'vm_id'});
         return {
             'snapshot' => JSON::false,
             'globalId' => $global_id,
             'tags' => {
                 VTAG_TYPE() => 'images',
                 VTAG_VM() => $vm_id,
+                VTAG_DISK() => $disk_id,
             },
         };
     }
@@ -765,6 +822,27 @@ sub sp_get_loc_name($) {
     return $cfg->{'proxmox'}->{'id'}->{'name'};
 }
 
+sub find_free_disk($ $) {
+    my ($cfg, $vm_id) = @_;
+
+    # OK, maybe there might be a better way to do this some day...
+    my $lst = sp_volsnap_list($cfg);
+    my $disk_id = 0;
+    for my $vol (@{$lst->{'data'}->{'volumes'}}) {
+        next unless sp_is_ours($cfg, $vol, any_storage => 1) &&
+            ($vol->{'tags'}->{VTAG_VM()} // '') eq $vm_id;
+
+        my $current_str = $vol->{'tags'}->{VTAG_DISK()};
+        if (defined $current_str) {
+            my $current = int $current_str;
+            if ($current >= $disk_id) {
+                $disk_id = $current + 1;
+            }
+        }
+    }
+    return $disk_id;
+}
+
 # Create the volume
 sub alloc_image {
 	my ($class, $storeid, $scfg, $vmid, $fmt, $name, $size) = @_;
@@ -774,10 +852,16 @@ sub alloc_image {
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
 	
+    my $disk_id;
+    if (defined $vmid) {
+        $disk_id = find_free_disk($cfg, $vmid);
+    }
+
 	my $c_res = sp_vol_create($cfg, $size, sp_get_template($cfg), 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
             (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
+            (defined($disk_id) ? (VTAG_DISK() => "$disk_id"): ()),
         });
         my $global_id = ($c_res->{'data'} // {})->{'globalId'};
         if (!defined($global_id) || $global_id eq '') {
@@ -1066,23 +1150,29 @@ sub clone_image {
 
     die "clone_image on wrong vtype '$vtype'\n" if $vtype ne 'images';
 
+
+    my $updated_tags = sub {
+        my ($current_tags) = @_;
+        my $disk_id;
+        if (defined $current_tags->{VTAG_DISK()}) {
+            $disk_id = find_free_disk($cfg, $vmid);
+        }
+
+        return {
+            %{$current_tags},
+            VTAG_BASE() => '0',
+            VTAG_VM() => "$vmid",
+            (defined $disk_id ? (VTAG_DISK() => "$disk_id") : ()),
+        };
+    };
+
     my $c_res;
     if ($vol->{'snapshot'}) {
         my $current_tags = sp_snap_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
-
-        $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, {
-            %{$current_tags},
-            VTAG_BASE() => '0',
-            VTAG_VM() => "$vmid",
-        });
+        $c_res = sp_vol_from_snapshot($cfg, $global_id, 0, $updated_tags->($current_tags));
     } else {
         my $current_tags = sp_vol_info_single($cfg, $vol->{'globalId'})->{'tags'} // {};
-
-        $c_res = sp_vol_from_parent_volume($cfg, $global_id, 0, {
-            %{$current_tags},
-            VTAG_BASE() => '0',
-            VTAG_VM() => "$vmid",
-        });
+        $c_res = sp_vol_from_parent_volume($cfg, $global_id, 0, $updated_tags->($current_tags));
     }
 
     my $newvol = sp_vol_info_single($cfg, $c_res->{'data'}->{'globalId'});

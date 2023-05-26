@@ -14,16 +14,26 @@ Note that boolean values are encoded as "0" or "1" when represented as strings.
 The object name is stored as a string resembling a filename, but structured.
 The types of objects supported by the StorPool plugin are as follows:
 
-- `vm-<vm_id>-sp-<global_id>.raw`: volume: a disk attached to a VM
-- `base-<vm_id>-sp-<global_id>.raw`: snapshot: a disk attached to a VM template.
+- `vm-<vm_id>-disk-<disk_id>-sp-<global_id>.raw`: volume: a disk attached to a VM
   The `vm_id` portion must consist of digits only and represent a decimal non-negative
   integer number not less than 100.
+  The `disk_id` portion must consist of digits only and represent a decimal non-negative
+  integer number.
   The `global_id` portion must be a valid StorPool global ID; it identifies
   the snapshot where the data is stored.
-- `snap-<vm_id>-<snapshot_id>-p-<parent_id>-sp-<global_id>.raw`: snapshot: a Proxmox
+- `base-<vm_id>-disk-<disk_id>-sp-<global_id>.raw`: snapshot: a disk attached to a VM template.
+  The `vm_id` portion must consist of digits only and represent a decimal non-negative
+  integer number not less than 100.
+  The `disk_id` portion must consist of digits only and represent a decimal non-negative
+  integer number.
+  The `global_id` portion must be a valid StorPool global ID; it identifies
+  the snapshot where the data is stored.
+- `snap-<vm_id>-disk-<disk_id>-<snapshot_id>-p-<parent_id>-sp-<global_id>.raw`: snapshot: a Proxmox
   snapshot of a VM disk.
   The `vm_id` portion must consist of digits only and represent a decimal non-negative
   integer number not less than 100.
+  The `disk_id` portion must consist of digits only and represent a decimal non-negative
+  integer number.
   The `snapshot_id` portion must be in the Proxmox identifier format.
   The `parent_id` portion must be a valid StorPool global ID.
   The `global_id` portion must be a valid StorPool global ID; it identifies
