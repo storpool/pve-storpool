@@ -30,8 +30,8 @@ use constant {
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
     VTAG_COMMENT => 'pve-comment',
-    VTAG_SNAP => 'pve-snapshot',
-    VTAG_SNAP_PARENT => 'pve-snapshot-parent',
+    VTAG_SNAP => 'pve-snap',
+    VTAG_SNAP_PARENT => 'pve-snap-v',
 
     VTAG_V_PVE => 'pve',
 
