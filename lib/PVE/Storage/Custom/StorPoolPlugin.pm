@@ -331,13 +331,19 @@ sub sp_vol_revert_to_snapshot($$$) {
     return $res
 }
 
+sub sp_is_ours($$) {
+    my ($cfg, $vol) = @_;
+
+    sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
+    sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) &&
+    $vol->{'templateName'} eq $cfg->{'storeid'}
+}
+
 sub sp_volume_find_snapshots($$$) {
     my ($cfg, $vol, $snap) = @_;
 
     grep {
-        sp_vol_tag_is($_, VTAG_VIRT, VTAG_V_PVE) &&
-        sp_vol_tag_is($_, VTAG_LOC, sp_get_loc_name($cfg)) &&
-        $_->{'templateName'} eq $cfg->{'storeid'} &&
+        sp_is_ours($cfg, $_) &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
     } @{sp_snap_list($cfg)->{'data'}}
@@ -942,12 +948,9 @@ sub list_volumes {
     my $res = [];
 
     for my $vol (@{$volStatus->{'data'}->{'volumes'}}) {
-        next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
-            sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg));
+        next unless sp_is_ours($cfg, $vol);
         my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
         next unless defined($v_type) && exists $ctypes{$v_type};
-        my $v_template = $vol->{templateName} // '';
-        next unless $v_template eq sp_get_template($cfg);
 
         my $v_vmid = sp_vol_get_tag($vol, VTAG_VM);
         if (defined $vmid) {
