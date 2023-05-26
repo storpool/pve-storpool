@@ -24,7 +24,7 @@ use base qw(PVE::Storage::Plugin);
 # The volume tags that we look for and set
 use constant {
     VTAG_VIRT => 'virt',
-    VTAG_CLUSTER => 'pve-cluster',
+    VTAG_LOC => 'pve-loc',
     VTAG_TYPE => 'pve-type',
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
@@ -327,7 +327,7 @@ sub sp_volume_find_snapshots($$$) {
 
     grep {
         sp_vol_tag_is($_, VTAG_VIRT, VTAG_V_PVE) &&
-        sp_vol_tag_is($_, VTAG_CLUSTER, sp_get_cluster_name($cfg)) &&
+        sp_vol_tag_is($_, VTAG_LOC, sp_get_loc_name($cfg)) &&
         $_->{'templateName'} eq $cfg->{'storeid'} &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
@@ -707,12 +707,12 @@ sub sp_get_tags($) {
     my %extra_tags = map { split /=/, $_, 2 } split /\s+/, $extra_spec;
     return (
         VTAG_VIRT() => VTAG_V_PVE,
-        VTAG_CLUSTER() => sp_get_cluster_name($cfg),
+        VTAG_LOC() => sp_get_loc_name($cfg),
         %extra_tags,
     );
 }
 
-sub sp_get_cluster_name($) {
+sub sp_get_loc_name($) {
     my ($cfg) = @_;
 
     return $cfg->{'proxmox'}->{'id'}->{'name'};
@@ -923,7 +923,7 @@ sub list_volumes {
 
     for my $vol (values %{$volStatus->{'data'}}) {
         next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
-            sp_vol_tag_is($vol, VTAG_CLUSTER, sp_get_cluster_name($cfg));
+            sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg));
         my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
         next unless defined($v_type) && exists $ctypes{$v_type};
         my $v_template = $vol->{templateName} // '';
@@ -1139,7 +1139,7 @@ sub delete_store {
 
 	foreach my $vol (@{$vols_hash->{data}}){
                 next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
-                    sp_vol_tag_is($vol, VTAG_CLUSTER, sp_get_cluster_name($cfg));
+                    sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg));
                 next unless $vol->{'templateName'} eq $storeid;
                 if ($attachments{$vol->{'name'}}) {
                         sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
@@ -1149,7 +1149,7 @@ sub delete_store {
 
 	foreach my $snap (@{$snaps_hash->{data}}){
                 next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) &&
-                    sp_vol_tag_is($snap, VTAG_CLUSTER, sp_get_cluster_name($cfg));
+                    sp_vol_tag_is($snap, VTAG_LOC, sp_get_loc_name($cfg));
                 next unless $snap->{'templateName'} eq $storeid;
                 if ($attachments{$snap->{'name'}}) {
                         sp_vol_detach($snap->{'globalId'}, 'all', 0, 1);
