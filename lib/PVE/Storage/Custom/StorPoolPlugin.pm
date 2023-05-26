@@ -26,7 +26,6 @@ use constant {
     VTAG_VIRT => 'virt',
     VTAG_CLUSTER => 'pve-cluster',
     VTAG_TYPE => 'pve-type',
-    VTAG_FORMAT => 'pve-format',
     VTAG_VM => 'pve-vm',
     VTAG_BASE => 'pve-base',
     VTAG_COMMENT => 'pve-comment',
@@ -731,7 +730,6 @@ sub alloc_image {
 	my $c_res = sp_vol_create($cfg, undef, $size, $storeid, 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
-            VTAG_FORMAT() => $fmt,
             (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
         });
         my $global_id = ($c_res->{'data'} // {})->{'globalId'};
