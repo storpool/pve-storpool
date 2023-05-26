@@ -60,10 +60,10 @@ The types of objects supported by the StorPool plugin are as follows:
 - `pve-type`: string: the content type of the Proxmox VE object stored in this volume or
   snapshot, e.g. "images", "iso", etc.
 - `pve-vm`: integer: the ID of the Proxmox VE virtual machine that this object belongs to
+- `pve-disk`: integer: a monotonically increasing "number" of the disk within that VM
 - `pve-base`: boolean: is this a base image, e.g. a disk belonging to a VM template as
   opposed to one belonging to an actual VM
 - `pve-comment`: string: an optional comment describing e.g. an ISO image or a cloud
   root disk image.
-  For the moment this string may not contain whitespace or dashes.
 - `pve-snap`: string: the name of the VM snapshot that this disk is part of, if any
-- `pve-snap-parent`: string: the volume that this disk represents in the VM snapshot, if any
+- `pve-snap-v`: string: the volume that this disk represents in the VM snapshot, if any
