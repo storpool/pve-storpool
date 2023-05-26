@@ -22,6 +22,13 @@ use LWP::Simple;
 
 use base qw(PVE::Storage::Plugin);
 
+my ($RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
+BEGIN {
+    $RE_GLOBAL_ID = '[a-z0-9]+ \. [a-z0-9+] \. [a-z0-9]+';
+    $RE_PROXMOX_ID = '[a-z] [a-z0-9_.-]* [a-z0-9]';
+    $RE_VM_ID = '[1-9][0-9]*';
+}
+
 # The volume tags that we look for and set
 use constant {
     VTAG_VIRT => 'virt',
@@ -38,6 +45,40 @@ use constant {
 
     CFG_FNAME_API => '/etc/pve/storpool/api.cfg',
     CFG_FNAME_PROXMOX => '/etc/pve/storpool/proxmox.cfg',
+
+    RE_VOLNAME_ISO => qr{
+        ^
+        (?P<comment> .* )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .iso
+        $
+    }x,
+    RE_VOLNAME_IMG => qr{
+        ^
+        img
+        - (?P<comment> .* )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .raw
+        $
+    }x,
+    RE_VOLNAME_SNAPSHOT => qr{
+        ^
+        snap
+        - (?P<vm_id> $RE_VM_ID )
+        - (?P<snapshot> $RE_PROXMOX_ID )
+        -p- (?P<parent_id> $RE_GLOBAL_ID )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .raw
+        $
+    }x,
+    RE_VOLNAME_DISK => qr{
+        ^
+        vm
+        - (?P<vm_id> $RE_VM_ID )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .raw
+        $
+    }x,
 };
 
 my $SP_VERS = '1.0';
@@ -385,146 +426,124 @@ sub sp_type_is_image($) {
     $type eq 'images' || $type eq 'rootdir'
 }
 
-# Encode a single key/value pair.
-sub sp_encode_single($) {
-    my ($pair) = @_;
-    if (scalar @{$pair} != 2) {
-        log_and_die "Internal error: sp_encode_single: expected two elements: ".Dumper($pair);
-    }
-    my ($key, $value) = @{$pair};
-
-    if (length($key) != 1) {
-        log_and_die "Internal error: sp_encode_single: expected a single-character key: ".Dumper($pair);
-    }
-    $value //= '';
-
-    # Encode some special characters; for the present, dashes only.
-    $value =~ s/-/--/g;
-
-    "$key$value"
-}
-
-# Encode a list of [key, value] pairs into a "V0-ga.b.c-timages"-style string.
-sub sp_encode_list($) {
-    my ($raw) = @_;
-    my @slugs = map { sp_encode_single($_) } @{$raw};
-    join('-', @slugs)
-}
-
 sub sp_encode_volsnap_from_tags($) {
     my ($vol) = @_;
 
-    sp_encode_list([
-        [
-            ($vol->{'snapshot'} ? 'S' : 'V'),
-            '0',
-        ],
-        [
-            'g',
-            $vol->{'globalId'},
-        ],
-        [
-            't',
-            $vol->{'tags'}->{VTAG_TYPE()},
-        ],
-        [
-            'v',
-            $vol->{'tags'}->{VTAG_VM()} // '',
-        ],
-        [
-            'B',
-            $vol->{'tags'}->{VTAG_BASE()} // '0',
-        ],
-        [
-            'c',
-            $vol->{'tags'}->{VTAG_COMMENT()} // '',
-        ],
-        [
-            's',
-            $vol->{'tags'}->{VTAG_SNAP()} // '',
-        ],
-        [
-            'P',
-            $vol->{'tags'}->{VTAG_SNAP_PARENT()} // '',
-        ],
-        # TODO: pp: 'f' for a format other than "raw"
-    ])
-}
+    if ($vol->{'tags'}->{VTAG_TYPE()} eq 'iso') {
+        if ($vol->{'tags'}->{VTAG_VM()} ||
+            $vol->{'tags'}->{VTAG_BASE()} ||
+            $vol->{'tags'}->{VTAG_SNAP()} ||
+            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+            log_and_die 'An ISO image should not have the VM, base, snapshot, or snapshot parent tags: '.
+                Dumper($vol);
+        }
+        if (!$vol->{'snapshot'}) {
+            log_and_die 'An ISO image should be a StorPool snapshot: '.Dumper($vol);
+        }
 
-sub sp_decode_single($) {
-    my ($part) = @_;
-
-    if (!defined($part) || $part eq '') {
-        log_and_die 'Internal error: sp_decode_single: got part '.Dumper(\$part);
+        return ($vol->{'tags'}->{VTAG_COMMENT()} // 'unlabeled').'-sp-'.$vol->{'globalId'}.'.iso';
     }
 
-    # Make sure there is a sensible number of dashes in there...
-    if ($part =~ /(?: ^ | [^-] ) - (?: -- )* (?: $ | [^-] )/x) {
-        log_and_die 'FIXME-TODO: decode an odd number of dashes: '.Dumper(\$part);
-    }
-    # ...and then decode them.
-    $part =~ s/--/-/g;
-
-    split //, $part, 2
-}
-
-sub sp_decode_list($) {
-    my ($raw) = @_;
-
-    # Split on dashes, but ignore double dashes.
-    my @parts;
-    while ($raw =~ /^ (?P<first> (?: [^-] | -- )+ ) (?: - (?P<rest> .* ) )? $/x) {
-        push @parts, $+{'first'};
-        $raw = $+{'rest'};
-        last unless defined $raw;
-    }
-    if ($raw) {
-        log_and_die "FIXME-TODO: sp_decode_list: leftover ".Dumper(\$raw);
+    if (!sp_type_is_image($vol->{'tags'}->{VTAG_TYPE()})) {
+        log_and_die 'Internal StorPool error: not an image: '.Dumper($vol);
     }
 
-    map { sp_decode_single($_) } @parts
-}
+    if (!defined $vol->{'tags'}->{VTAG_VM()}) {
+        if ($vol->{'tags'}->{VTAG_BASE()} ||
+            $vol->{'tags'}->{VTAG_SNAP()} ||
+            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+            log_and_die 'A freestanding image should not have the base, snapshot, or snapshot parent tags: '.
+                Dumper($vol);
+        }
+        if (!$vol->{'snapshot'}) {
+            log_and_die 'A freestanding image should be a StorPool snapshot: '.Dumper($vol);
+        }
 
-sub sp_s($) {
-    my ($value) = @_;
-
-    if (defined($value) && $value eq '') {
-        undef
-    } else {
-        $value
+        return 'img-'.($vol->{'tags'}->{VTAG_COMMENT()} // 'unlabeled').'-sp-'.$vol->{'globalId'}.'.raw';
     }
+
+    if ($vol->{'tags'}->{VTAG_BASE()}) {
+        if ($vol->{'tags'}->{VTAG_SNAP()} ||
+            $vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+            log_and_die 'A base disk image should not have the snapshot or snapshot parent tags: '.
+                Dumper($vol);
+        }
+        if (!$vol->{'snapshot'}) {
+            log_and_die 'A base disk image should be a StorPool snapshot: '.Dumper($vol);
+        }
+
+        return 'base-'.$vol->{'tags'}->{VTAG_VM()}.'-sp-'.$vol->{'globalId'}.'.raw';
+    }
+
+    if ($vol->{'tags'}->{VTAG_SNAP()}) {
+        if (!$vol->{'tags'}->{VTAG_SNAP_PARENT()}) {
+            log_and_die 'A disk snapshot should have the snapshot parent tag: '.Dumper($vol);
+        }
+        if (!$vol->{'snapshot'}) {
+            log_and_die 'A base disk image should be a StorPool snapshot: '.Dumper($vol);
+        }
+
+        return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-'.$vol->{'tags'}->{VTAG_SNAP()}.
+            '-p-'.$vol->{'tags'}->{VTAG_SNAP_PARENT()}.'-sp-'.$vol->{'globalId'}.'.raw';
+    }
+
+    return 'vm-'.$vol->{'tags'}->{VTAG_VM()}.'-sp-'.$vol->{'globalId'}.'.raw';
 }
 
 sub sp_decode_volsnap_to_tags($) {
     my ($volname) = @_;
 
-    my ($first, $rest) = split /-/, $volname, 2;
-    if (!defined($first)) {
-        log_and_die "sp_decode_volname_to_tags: no dashes at all: ".Dumper(\$volname);
+    if ($volname =~ RE_VOLNAME_ISO) {
+        my ($comment, $global_id) = ($+{'comment'}, $+{'global_id'});
+        return {
+            'snapshot' => JSON::true,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'iso',
+                VTAG_COMMENT() => $comment,
+            },
+        };
     }
 
-    my $snapshot;
-    if ($first eq 'V0') {
-        $snapshot = JSON::false;
-    } elsif ($first eq 'S0') {
-        $snapshot = JSON::true;
-    } else {
-        log_and_die 'sp_decode_volname_to_tags: unsupported first slug: '.Dumper(\$volname);
+    if ($volname =~ RE_VOLNAME_IMG) {
+        my ($comment, $global_id) = ($+{'comment'}, $+{'global_id'});
+        return {
+            'snapshot' => JSON::true,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'images',
+                VTAG_COMMENT() => $comment,
+            },
+        };
     }
 
-    my %pairs = sp_decode_list($rest // '');
-    return {
-        snapshot => $snapshot,
-        globalId => $pairs{'g'},
-        tags => {
-            VTAG_TYPE() => $pairs{'t'},
-            VTAG_VM() => sp_s($pairs{'v'}),
-            VTAG_BASE() => $pairs{'B'} // '0',
-            VTAG_COMMENT() => sp_s($pairs{'c'}),
-            VTAG_SNAP() => sp_s($pairs{'s'}),
-            VTAG_SNAP_PARENT() => sp_s($pairs{'P'}),
-        },
-    };
+    if ($volname =~ RE_VOLNAME_SNAPSHOT) {
+        my ($global_id, $parent_id, $snapshot, $vm_id) = ($+{'global_id'}, $+{'parent_id'}, $+{'snapshot'}, $+{'vm_id'});
+        return {
+            'snapshot' => JSON::true,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'images',
+                VTAG_VM() => $vm_id,
+                VTAG_SNAP() => $snapshot,
+                VTAG_SNAP_PARENT() => $parent_id,
+            },
+        };
+    }
+
+    if ($volname =~ RE_VOLNAME_DISK) {
+        my ($global_id, $vm_id) = ($+{'global_id'}, $+{'vm_id'});
+        return {
+            'snapshot' => JSON::false,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'images',
+                VTAG_VM() => $vm_id,
+            },
+        };
+    }
+
+    log_and_die "Internal StorPool error: don't know how to decode ".Dumper(\$volname);
 }
 
 sub cfg_format_version($) {

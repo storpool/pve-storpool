@@ -11,23 +11,33 @@ Note that boolean values are encoded as "0" or "1" when represented as strings.
 
 ## Object names stored in the Proxmox VE database
 
-The object name is stored as a list of dash-separated key/value pairs.
-The key is a single character.
-If the value is an empty string, it either denotes a null value or an empty string
-depending on whether the property is marked as nullable.
+The object name is stored as a string resembling a filename, but structured.
+The types of objects supported by the StorPool plugin are as follows:
 
-- `V` or `S`: integer: the object name format version, the constant integer 0.
-  If the key is `V`, the data is stored in a StorPool volume; `S` denotes a snapshot.
-- `g`: string: the StorPool global ID of the volume or snapshot
-- `t`: string: the Proxmox VE content type of the object, e.g. "images", "iso", etc.
-- `v`: integer, nullable: the Proxmox VM that this object belongs to, if any
-- `B`: boolean, nullable: is this a base image, e.g. a disk belonging to a VM template as
-  opposed to one belonging to an actual VM
-- `c`: string, nullable: an optional comment describing e.g. an ISO image or a cloud
-  root disk image.
-  For the moment this string may not contain whitespace or dashes.
-- `s`: string, nullable: the name of the VM snapshot that this disk is part of
-- `P`: string, nullable: the volume that this disk represents in the VM snapshot
+- `vm-<vm_id>-sp-<global_id>.raw`: volume: a disk attached to a VM
+- `base-<vm_id>-sp-<global_id>.raw`: snapshot: a disk attached to a VM template.
+  The `vm_id` portion must consist of digits only and represent a decimal non-negative
+  integer number not less than 100.
+  The `global_id` portion must be a valid StorPool global ID; it identifies
+  the snapshot where the data is stored.
+- `snap-<vm_id>-<snapshot_id>-p-<parent_id>-sp-<global_id>.raw`: snapshot: a Proxmox
+  snapshot of a VM disk.
+  The `vm_id` portion must consist of digits only and represent a decimal non-negative
+  integer number not less than 100.
+  The `snapshot_id` portion must be in the Proxmox identifier format.
+  The `parent_id` portion must be a valid StorPool global ID.
+  The `global_id` portion must be a valid StorPool global ID; it identifies
+  the snapshot where the data is stored.
+- `img-<id>-sp-<global_id>.raw`: snapshot: a "freestanding" disk image, one not
+  attached to any VM, but uploaded to the StorPool-backed storage in some other way.
+  This may be e.g. a cloud image to be imported as a VM's root disk.
+  The `id` portion must be in the Proxmox identifier format.
+  The `global_id` portion must be a valid StorPool global ID; it identifies
+  the snapshot where the data is stored.
+- `<id>-sp-<global_id>.iso`: snapshot: an ISO image to attach to VMs as a CD/DVD drive.
+  The `id` portion must be in the Proxmox identifier format.
+  The `global_id` portion must be a valid StorPool global ID; it identifies
+  the snapshot where the data is stored.
 
 ## Volume and snapshot tags
 
