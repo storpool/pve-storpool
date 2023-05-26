@@ -651,6 +651,10 @@ sub properties {
 	    description => 'Additional tags to add to the StorPool volumes and snapshots',
 	    type => 'string',
 	},
+	'template' => {
+	    description => 'The StorPool template to use, if different from the storage name',
+	    type => 'string',
+	},
     };
 }
 
@@ -665,6 +669,7 @@ sub options {
 	content => { optional => 1 },
 	format => { optional => 1 },
 	'extra-tags' => { optional => 1 },
+    template => { optional => 1 },
    };
 }
 
@@ -698,7 +703,7 @@ sub activate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     
-    sp_temp_get($cfg, $storeid);
+    sp_temp_get($cfg, sp_get_template($cfg));
 }
 
 sub sp_get_tags($) {
@@ -711,6 +716,12 @@ sub sp_get_tags($) {
         VTAG_LOC() => sp_get_loc_name($cfg),
         %extra_tags,
     );
+}
+
+sub sp_get_template($) {
+    my ($cfg) = @_;
+
+    return $cfg->{'scfg'}->{'template'} // $cfg->{'storeid'};
 }
 
 sub sp_get_loc_name($) {
@@ -728,7 +739,7 @@ sub alloc_image {
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
 	
-	my $c_res = sp_vol_create($cfg, undef, $size, $storeid, 0, {
+	my $c_res = sp_vol_create($cfg, undef, $size, sp_get_template($cfg), 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
             (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
@@ -753,7 +764,7 @@ sub status {
     my $free = 0;
     my $used = 0;
     
-    my $template = sp_temp_get($cfg, $storeid);
+    my $template = sp_temp_get($cfg, sp_get_template($cfg));
     my $placeAll = sp_placementgroup_list($cfg, $template->{data}->{placeAll})->{data}->{disks};
     my $placeTail = sp_placementgroup_list($cfg, $template->{data}->{placeTail})->{data}->{disks};
     my $minAG = 100000000000000;
@@ -780,7 +791,7 @@ sub status {
     
     #This way this could be negative
     $free = $total - $used;
-    #my $template = sp_temp_get($storeid);
+    #my $template = sp_temp_get(sp_get_template($cfg));
         
     my $replication = $template->{'data'}->{'replication'};
     return ($total/$replication, $free/$replication, $used/$replication, 1);
@@ -928,7 +939,7 @@ sub list_volumes {
         my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
         next unless defined($v_type) && exists $ctypes{$v_type};
         my $v_template = $vol->{templateName} // '';
-        next unless $v_template eq $storeid;
+        next unless $v_template eq sp_get_template($cfg);
 
         my $v_vmid = sp_vol_get_tag($vol, VTAG_VM);
         if (defined $vmid) {
@@ -1141,7 +1152,7 @@ sub delete_store {
 	foreach my $vol (@{$vols_hash->{data}}){
                 next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
                     sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg));
-                next unless $vol->{'templateName'} eq $storeid;
+                next unless $vol->{'templateName'} eq sp_get_template($cfg);
                 if ($attachments{$vol->{'name'}}) {
                         sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
                 }
@@ -1151,7 +1162,7 @@ sub delete_store {
 	foreach my $snap (@{$snaps_hash->{data}}){
                 next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) &&
                     sp_vol_tag_is($snap, VTAG_LOC, sp_get_loc_name($cfg));
-                next unless $snap->{'templateName'} eq $storeid;
+                next unless $snap->{'templateName'} eq sp_get_template($cfg);
                 if ($attachments{$snap->{'name'}}) {
                         sp_vol_detach($snap->{'globalId'}, 'all', 0, 1);
                 }
