@@ -13,6 +13,7 @@ use PVE::Storage;
 use PVE::Storage::Plugin;
 use PVE::JSONSchema qw(get_standard_option);
 use Sys::Hostname;
+use Sys::Syslog qw(syslog);
 use List::Util qw'first';
 
 use JSON;
@@ -49,8 +50,8 @@ my $SP_VERS = '1.0';
 sub log_and_die($) {
     my ($msg) = @_;
 
-    warn "FIXME-WIP: $msg\n";
-    croak "FIXME-WIP: $msg\n";
+    syslog 'err', 'StorPool plugin: %s', $msg;
+    croak "$msg\n";
 }
 
 # Wrapper functions for the actual request
