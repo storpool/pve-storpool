@@ -59,8 +59,6 @@ Note: these steps will soon be partly automated by a command-line helper tool.
   first-hostname = 11
   second-hostname = 12
   ```
-- Copy these files over to all the Proxmox VE hosts which will need to access
-  StorPool-backed volumes and snapshots.
 
 ## Create a StorPool-backed Proxmox VE storage
 
