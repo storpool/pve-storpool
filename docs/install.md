@@ -88,7 +88,7 @@ Note: this part may be partly automated by a command-line helper tool.
 ## Pre-populate the Proxmox storage with some volumes and snapshots
 
 This step is optional.
-At the present there is not much benefit in keeping raw disk images
+At present there is not much benefit in keeping raw disk images
 (e.g. cloud images for various Linux distributions and other OS's) on
 StorPool-backed storage, since Proxmox VE will still insist on making
 a full clone of the disks.
@@ -113,7 +113,7 @@ It will soon be partly automated by a command-line helper tool.
 - Make sure Proxmox VE can see this DVD ISO 9660 image; look for
   a `sp-nvme:debian-11.7.0-amd64-DVD-1-sp-kr.b.f.iso` "iso" image:
   ``` sh
-  pvesm list hybrid
+  pvesm list sp-nvme
   ```
 - Create a StorPool snapshot that contains a Debian cloud image.
   Set the appropriate tags so that the StorPool Proxmox VE plugin will be
@@ -129,7 +129,7 @@ It will soon be partly automated by a command-line helper tool.
 - Make sure Proxmox VE can see this DVD ISO 9660 image; look for
   a `sp-nvme:img-debian-11-nocloud-amd64-20230515-sp-kr.b.8.raw` "images" image:
   ``` sh
-  pvesm list hybrid
+  pvesm list sp-nvme
   ```
 
 ## Create a Proxmox VE virtual machine from the cloud image
