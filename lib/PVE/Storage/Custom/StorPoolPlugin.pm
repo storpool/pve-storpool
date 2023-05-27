@@ -692,19 +692,27 @@ sub cfg_load_fmtver($ $ $) {
 
 sub cfg_parse_api() {
     my %raw = cfg_load_fmtver(CFG_FNAME_API, 0, 1);
-    my ($host, $port) = ($raw{'api'}->{'host'}, $raw{'api'}->{'port'});
+    my ($host, $port, $auth_token) = ($raw{'api'}->{'host'}, $raw{'api'}->{'port'}, $raw{'api'}->{'auth_token'});
+    my $ourid = $raw{'api.ourid'}->{hostname()};
+    if (!defined $host || !defined $port || !defined $auth_token || !defined $ourid) {
+        log_and_die 'Incomplete configuration in the '.CFG_FNAME_API.' file; need host, port, node id';
+    }
     return {
-        'auth_token' => $raw{'api'}->{'auth_token'},
-        'ourid' => $raw{'api'}->{'ourid'},
+        'auth_token' => $auth_token,
+        'ourid' => $ourid,
         'url' => "http://$host:$port/ctrl/$SP_VERS/",
     };
 }
 
 sub cfg_parse_proxmox() {
     my %raw = cfg_load_fmtver(CFG_FNAME_PROXMOX, 0, 1);
+    my $name = $raw{'id'}->{'name'};
+    if (!defined $name) {
+        log_and_die 'Incomplete configuration in the '.CFG_FNAME_PROXMOX.' file; need name';
+    }
     return {
         'id' => {
-            'name' => $raw{'id'}->{'name'},
+            'name' => $name,
         },
     };
 }
