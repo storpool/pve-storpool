@@ -476,12 +476,14 @@ sub sp_is_empty($) {
 
 sub sp_encode_volsnap_from_tags($) {
     my ($vol) = @_;
+    my %tags = %{$vol->{'tags'}};
+    my $global_id = $vol->{'globalId'};
 
-    if ($vol->{'tags'}->{VTAG_TYPE()} eq 'iso') {
-        if (!sp_is_empty($vol->{'tags'}->{VTAG_VM()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_BASE()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+    if ($tags{VTAG_TYPE()} eq 'iso') {
+        if (!sp_is_empty($tags{VTAG_VM()}) ||
+            !sp_is_empty($tags{VTAG_BASE()}) ||
+            !sp_is_empty($tags{VTAG_SNAP()}) ||
+            !sp_is_empty($tags{VTAG_SNAP_PARENT()})) {
             log_and_die 'An ISO image should not have the VM, base, snapshot, or snapshot parent tags: '.
                 Dumper($vol);
         }
@@ -489,17 +491,17 @@ sub sp_encode_volsnap_from_tags($) {
             log_and_die 'An ISO image should be a StorPool snapshot: '.Dumper($vol);
         }
 
-        return ($vol->{'tags'}->{VTAG_COMMENT()} // 'unlabeled').'-sp-'.$vol->{'globalId'}.'.iso';
+        return ($tags{VTAG_COMMENT()} // 'unlabeled')."-sp-$global_id.iso";
     }
 
-    if (!sp_type_is_image($vol->{'tags'}->{VTAG_TYPE()})) {
+    if (!sp_type_is_image($tags{VTAG_TYPE()})) {
         log_and_die 'Internal StorPool error: not an image: '.Dumper($vol);
     }
 
-    if (!defined $vol->{'tags'}->{VTAG_VM()}) {
-        if (!sp_is_empty($vol->{'tags'}->{VTAG_BASE()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+    if (!defined $tags{VTAG_VM()}) {
+        if (!sp_is_empty($tags{VTAG_BASE()}) ||
+            !sp_is_empty($tags{VTAG_SNAP()}) ||
+            !sp_is_empty($tags{VTAG_SNAP_PARENT()})) {
             log_and_die 'A freestanding image should not have the base, snapshot, or snapshot parent tags: '.
                 Dumper($vol);
         }
@@ -507,66 +509,61 @@ sub sp_encode_volsnap_from_tags($) {
             log_and_die 'A freestanding image should be a StorPool snapshot: '.Dumper($vol);
         }
 
-        return 'img-'.($vol->{'tags'}->{VTAG_COMMENT()} // 'unlabeled').'-sp-'.$vol->{'globalId'}.'.raw';
+        return 'img-'.($tags{VTAG_COMMENT()} // 'unlabeled')."-sp-$global_id.raw";
     }
 
-    if ($vol->{'tags'}->{VTAG_BASE()}) {
-        if (!sp_is_empty($vol->{'tags'}->{VTAG_SNAP()}) ||
-            !sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+    if ($tags{VTAG_BASE()}) {
+        if (!sp_is_empty($tags{VTAG_SNAP()}) ||
+            !sp_is_empty($tags{VTAG_SNAP_PARENT()})) {
             log_and_die 'A base disk image should not have the snapshot or snapshot parent tags: '.
                 Dumper($vol);
         }
         if (!$vol->{'snapshot'}) {
             log_and_die 'A base disk image should be a StorPool snapshot: '.Dumper($vol);
         }
-        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+        if (sp_is_empty($tags{VTAG_DISK()})) {
             log_and_die 'A base disk image should specify a disk: '.Dumper($vol);
         }
 
-        return 'base-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
-            '-sp-'.$vol->{'globalId'}.'.raw';
+        return "base-$tags{VTAG_VM()}-disk-$tags{VTAG_DISK()}-sp-$global_id.raw";
     }
 
-    if ($vol->{'tags'}->{VTAG_SNAP()}) {
-        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+    if ($tags{VTAG_SNAP()}) {
+        if (sp_is_empty($tags{VTAG_DISK()})) {
             log_and_die 'A disk or VM state snapshot should specify a disk: '.Dumper($vol);
         }
 
-        if ($vol->{'tags'}->{VTAG_DISK()} eq 'state') {
+        if ($tags{VTAG_DISK()} eq 'state') {
             if ($vol->{'snapshot'}) {
                 log_and_die 'A VM state snapshot should be a StorPool volume: '.Dumper($vol);
             }
 
-            if (!sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+            if (!sp_is_empty($tags{VTAG_SNAP_PARENT()})) {
                 log_and_die 'A VM state snapshot should not have the snapshot parent tag: '.Dumper($vol);
             }
 
-            return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-state'.
-                '-'.$vol->{'tags'}->{VTAG_SNAP()}.
-                '-sp-'.$vol->{'globalId'}.'.raw';
+            return "snap-$tags{VTAG_VM()}-state-$tags{VTAG_SNAP()}-sp-$global_id.raw";
         }
 
         if (!$vol->{'snapshot'}) {
             log_and_die 'A disk or VM state snapshot should be a StorPool snapshot: '.Dumper($vol);
         }
-        if (sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+        if (sp_is_empty($tags{VTAG_SNAP_PARENT()})) {
             log_and_die 'A disk snapshot should have the snapshot parent tag: '.Dumper($vol);
         }
 
-        return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
-            '-'.$vol->{'tags'}->{VTAG_SNAP()}.'-p-'.$vol->{'tags'}->{VTAG_SNAP_PARENT()}.
-            '-sp-'.$vol->{'globalId'}.'.raw';
+        return "snap-$tags{VTAG_VM()}-disk-$tags{VTAG_DISK()}".
+            "-$tags{VTAG_SNAP()}-p-$tags{VTAG_SNAP_PARENT()}-sp-$global_id.raw";
     }
 
     if ($vol->{'snapshot'}) {
         log_and_die 'A disk image should be a StorPool volume: '.Dumper($vol);
     }
-    if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+    if (sp_is_empty($tags{VTAG_DISK()})) {
         log_and_die 'A disk image should specify a disk: '.Dumper($vol);
     }
 
-    return 'vm-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
-        '-sp-'.$vol->{'globalId'}.'.raw';
+    return "vm-$tags{VTAG_VM()}-disk-$tags{VTAG_DISK()}-sp-$global_id.raw";
 }
 
 sub sp_decode_volsnap_to_tags($) {
