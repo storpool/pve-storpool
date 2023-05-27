@@ -77,6 +77,16 @@ use constant {
         .raw
         $
     }x,
+    RE_VOLNAME_VMSTATE => qr{
+        ^
+        snap
+        - (?P<vm_id> $RE_VM_ID )
+        -state
+        - (?P<snapshot> $RE_PROXMOX_ID )
+        -sp- (?P<global_id> $RE_GLOBAL_ID )
+        .raw
+        $
+    }x,
     RE_VOLNAME_BASE => qr{
         ^
         base
@@ -93,6 +103,16 @@ use constant {
         -disk- (?P<disk_id> $RE_DISK_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
         .raw
+        $
+    }x,
+
+    RE_VOLNAME_PROXMOX_VMSTATE => qr{
+        ^
+        vm
+        - (?P<vm_id> $RE_VM_ID )
+        -state
+        - (?P<snapshot> $RE_PROXMOX_ID )
+        \.raw
         $
     }x,
 };
@@ -508,14 +528,29 @@ sub sp_encode_volsnap_from_tags($) {
     }
 
     if ($vol->{'tags'}->{VTAG_SNAP()}) {
+        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
+            log_and_die 'A disk or VM state snapshot should specify a disk: '.Dumper($vol);
+        }
+
+        if ($vol->{'tags'}->{VTAG_DISK()} eq 'state') {
+            if ($vol->{'snapshot'}) {
+                log_and_die 'A VM state snapshot should be a StorPool volume: '.Dumper($vol);
+            }
+
+            if (!sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
+                log_and_die 'A VM state snapshot should not have the snapshot parent tag: '.Dumper($vol);
+            }
+
+            return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-state'.
+                '-'.$vol->{'tags'}->{VTAG_SNAP()}.
+                '-sp-'.$vol->{'globalId'}.'.raw';
+        }
+
         if (!$vol->{'snapshot'}) {
-            log_and_die 'A disk snapshot should be a StorPool snapshot: '.Dumper($vol);
+            log_and_die 'A disk or VM state snapshot should be a StorPool snapshot: '.Dumper($vol);
         }
         if (sp_is_empty($vol->{'tags'}->{VTAG_SNAP_PARENT()})) {
             log_and_die 'A disk snapshot should have the snapshot parent tag: '.Dumper($vol);
-        }
-        if (sp_is_empty($vol->{'tags'}->{VTAG_DISK()})) {
-            log_and_die 'A disk snapshot should specify a disk: '.Dumper($vol);
         }
 
         return 'snap-'.$vol->{'tags'}->{VTAG_VM()}.'-disk-'.$vol->{'tags'}->{VTAG_DISK()}.
@@ -572,6 +607,20 @@ sub sp_decode_volsnap_to_tags($) {
                 VTAG_DISK() => $disk_id,
                 VTAG_SNAP() => $snapshot,
                 VTAG_SNAP_PARENT() => $parent_id,
+            },
+        };
+    }
+
+    if ($volname =~ RE_VOLNAME_VMSTATE) {
+        my ($global_id, $snapshot, $vm_id) = ($+{'global_id'}, $+{'snapshot'}, $+{'vm_id'});
+        return {
+            'snapshot' => JSON::false,
+            'globalId' => $global_id,
+            'tags' => {
+                VTAG_TYPE() => 'images',
+                VTAG_VM() => $vm_id,
+                VTAG_DISK() => 'state',
+                VTAG_SNAP() => $snapshot,
             },
         };
     }
@@ -854,17 +903,34 @@ sub alloc_image {
 	# One of the few places where size is in K
 	$size *= 1024;
 	die "unsupported format '$fmt'" if $fmt ne 'raw';
+
 	
-    my $disk_id;
-    if (defined $vmid) {
-        $disk_id = find_free_disk($cfg, $vmid);
-    }
+    my %extra_tags = do {
+        if (defined $name && $name =~ RE_VOLNAME_PROXMOX_VMSTATE) {
+            my ($state_snapshot, $state_vmid) = ($+{'snapshot'}, $+{'vm_id'});
+            if ($state_vmid ne $vmid) {
+                log_and_die "Inconsistent VM snapshot state name: passed in VM id $vmid and name $name\n";
+            }
+            (
+                VTAG_VM() => $state_vmid,
+                VTAG_DISK() => 'state',
+                VTAG_SNAP() => $state_snapshot,
+            )
+        } elsif (defined $vmid) {
+            my $disk_id = find_free_disk($cfg, $vmid);
+            (
+                VTAG_VM() => "$vmid",
+                VTAG_DISK() => "$disk_id",
+            )
+        } else {
+            ()
+        }
+    };
 
 	my $c_res = sp_vol_create($cfg, $size, sp_get_template($cfg), 0, {
             sp_get_tags($cfg),
             VTAG_TYPE() => 'images',
-            (defined($vmid) ? (VTAG_VM() => "$vmid"): ()),
-            (defined($disk_id) ? (VTAG_DISK() => "$disk_id"): ()),
+            %extra_tags,
         });
         my $global_id = ($c_res->{'data'} // {})->{'globalId'};
         if (!defined($global_id) || $global_id eq '') {

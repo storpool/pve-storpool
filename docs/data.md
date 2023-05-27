@@ -18,6 +18,8 @@ The types of objects supported by the StorPool plugin are as follows:
 - `base-<vm_id>-disk-<disk_id>-sp-<global_id>.raw`: snapshot: a disk attached to a VM template.
 - `snap-<vm_id>-disk-<disk_id>-<snapshot_id>-p-<parent_id>-sp-<global_id>.raw`: snapshot: a Proxmox
   snapshot of a VM disk.
+- `snap-<vm_id>-state-<snapshot_id>-sp-<global_id>.raw`: volume: a Proxmox snapshot of
+  the current state (RAM, CPU, etc.) of a running VM.
 - `img-<id>-sp-<global_id>.raw`: snapshot: a "freestanding" disk image, one not
   attached to any VM, but uploaded to the StorPool-backed storage in some other way.
   This may be e.g. a cloud image to be imported as a VM's root disk.
