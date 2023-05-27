@@ -9,4 +9,5 @@ This repository contains the Proxmox VE plugin that allows the use of
 the StorPool storage backend.
 
 - [Data format definitions](data.md)
+- [Installing the StorPool Proxmox integration](install.md)
 - [To-do list](todo.md)
