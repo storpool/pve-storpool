@@ -55,7 +55,7 @@ use constant {
         ^
         (?P<comment> .* )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .iso
+        \.iso
         $
     }x,
     RE_VOLNAME_IMG => qr{
@@ -63,7 +63,7 @@ use constant {
         img
         - (?P<comment> .* )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .raw
+        \.raw
         $
     }x,
     RE_VOLNAME_SNAPSHOT => qr{
@@ -74,7 +74,7 @@ use constant {
         - (?P<snapshot> $RE_PROXMOX_ID )
         -p- (?P<parent_id> $RE_GLOBAL_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .raw
+        \.raw
         $
     }x,
     RE_VOLNAME_VMSTATE => qr{
@@ -84,7 +84,7 @@ use constant {
         -state
         - (?P<snapshot> $RE_PROXMOX_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .raw
+        \.raw
         $
     }x,
     RE_VOLNAME_BASE => qr{
@@ -93,7 +93,7 @@ use constant {
         - (?P<vm_id> $RE_VM_ID )
         -disk- (?P<disk_id> $RE_DISK_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .raw
+        \.raw
         $
     }x,
     RE_VOLNAME_DISK => qr{
@@ -102,7 +102,7 @@ use constant {
         - (?P<vm_id> $RE_VM_ID )
         -disk- (?P<disk_id> $RE_DISK_ID )
         -sp- (?P<global_id> $RE_GLOBAL_ID )
-        .raw
+        \.raw
         $
     }x,
 
