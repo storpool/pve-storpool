@@ -48,9 +48,6 @@ use constant {
 
     VTAG_V_PVE => 'pve',
 
-    CFG_FNAME_API => '/etc/pve/storpool/api.cfg',
-    CFG_FNAME_PROXMOX => '/etc/pve/storpool/proxmox.cfg',
-
     RE_VOLNAME_ISO => qr{
         ^
         (?P<comment> .* )
@@ -679,6 +676,18 @@ sub cfg_format_version($) {
     return ($major, $minor);
 }
 
+# Get some storpool settings from storpool.conf
+sub sp_confget() {
+    my %res;
+    open my $f, '-|', 'storpool_confget' or log_and_die "Could not run storpool_confget: $!";
+    while (<$f>) {
+        chomp;
+        my ($var, $value) = split /=/, $_, 2;
+        $res{$var} = $value;
+    }
+    return %res;
+}
+
 sub cfg_load_fmtver($ $ $) {
     my ($fname, $major, $minor) = @_;
 
@@ -702,11 +711,15 @@ sub cfg_load_fmtver($ $ $) {
 }
 
 sub cfg_parse_api() {
-    my %raw = cfg_load_fmtver(CFG_FNAME_API, 0, 1);
-    my ($host, $port, $auth_token) = ($raw{'api'}->{'host'}, $raw{'api'}->{'port'}, $raw{'api'}->{'auth_token'});
-    my $ourid = $raw{'api.ourid'}->{hostname()};
+    my %raw = sp_confget();
+    my ($host, $port, $auth_token, $ourid) = @raw{qw(
+        SP_API_HTTP_HOST
+        SP_API_HTTP_PORT
+        SP_AUTH_TOKEN
+        SP_OURID
+    )};
     if (!defined $host || !defined $port || !defined $auth_token || !defined $ourid) {
-        log_and_die 'Incomplete configuration in the '.CFG_FNAME_API.' file; need host, port, node id';
+        log_and_die 'Incomplete StorPool configuration; need host, port, auth token, node id';
     }
     return {
         'auth_token' => $auth_token,
@@ -715,25 +728,16 @@ sub cfg_parse_api() {
     };
 }
 
-sub cfg_parse_proxmox() {
-    my %raw = cfg_load_fmtver(CFG_FNAME_PROXMOX, 0, 1);
-    my $name = $raw{'id'}->{'name'};
-    if (!defined $name) {
-        log_and_die 'Incomplete configuration in the '.CFG_FNAME_PROXMOX.' file; need name';
-    }
-    return {
-        'id' => {
-            'name' => $name,
-        },
-    };
-}
-
 sub sp_cfg($$) {
     my ($scfg, $storeid) = @_;
 
     return {
         'api' => cfg_parse_api(),
-        'proxmox' => cfg_parse_proxmox(),
+        'proxmox' => {
+            'id' => {
+                'name' => PVE::Cluster::get_clinfo()->{'cluster'}->{'name'},
+            },
+        },
         'storeid' => $storeid,
         'scfg' => $scfg,
     };
