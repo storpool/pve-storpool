@@ -76,7 +76,7 @@ Note: this part may be partly automated by a command-line helper tool.
     'storpool' \
     'sp-nvme' \
     -shared true \
-    -content 'images,iso,vztmpl' \
+    -content 'images,iso' \
     -extra-tags 'tier=high' \
     -template 'nvme'
   ```
