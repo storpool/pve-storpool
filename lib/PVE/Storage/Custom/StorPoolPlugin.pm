@@ -291,6 +291,17 @@ sub sp_temp_get($$) {
 	return $res;
 }
 
+sub sp_temp_status($) {
+    my ($cfg) = @_;
+	
+	my $res = sp_get($cfg, "VolumeTemplatesStatus");
+	
+	# If there is an error here it's fatal, we do not check.
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+	
+	return $res;
+}
+
 #TODO, if adding more nodes, iso need to be attached to them as well
 sub sp_vol_attach($$$$$;$) {
 	my ($cfg, $global_id, $spid, $perms, $ignoreError, $is_snapshot) = @_;
@@ -950,44 +961,13 @@ sub alloc_image {
 sub status {
     my ($class, $storeid, $scfg, $cache) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
-    # TODO: pp: discuss: we should probably change this to process "template status" in some way
-    my $disks = sp_disk_list($cfg);
-
-    my $total = 0;
-    my $free = 0;
-    my $used = 0;
     
-    my $template = sp_temp_get($cfg, sp_get_template($cfg));
-    my $placeAll = sp_placementgroup_list($cfg, $template->{data}->{placeAll})->{data}->{disks};
-    my $placeTail = sp_placementgroup_list($cfg, $template->{data}->{placeTail})->{data}->{disks};
-    my $minAG = 100000000000000;
-
-    foreach my $diskID (@$placeAll){
-	$minAG = $disks->{data}->{$diskID}->{agCount} if $disks->{data}->{$diskID}->{agCount} < $minAG;
-	$used += $disks->{data}->{$diskID}->{'objectsOnDiskSize'};
+    my $name = sp_get_template($cfg);
+    my @ours = grep { $_->{'name'} eq $name} @{sp_temp_status($cfg)->{'data'}};
+    if (@ours != 1) {
+        log_and_die "StorPool internal error: expected exactly one '$name' entry in the 'template status' output, got ".Dumper(\@ours);
     }
-
-    if ($template->{data}->{placeAll} eq $template->{data}->{placeTail}){
-	$total = $minAG * 512*1024*1024 * 4096 / (4096 + 128) * scalar(@$placeAll);
-    }else{
-	foreach my $diskID (@$placeTail){
-	    $minAG = $disks->{data}->{$diskID}->{agCount} if $disks->{data}->{$diskID}->{agCount} < $minAG;
-	    $used += $disks->{data}->{$diskID}->{'objectsOnDiskSize'};
-	}
-	$total = $minAG * 512*1024*1024 * 4096 / (4096 + 128) * (scalar(@$placeAll) + scalar(@$placeTail));
-    }
-
-    #while ((my $key, my $disk) = each $disks->{'data'}){
-	#$total += $disk->{'agCount'} * 512*1024*1024 * 4096 / (4096 + 128);
-	#$used += $disk->{'objectsOnDiskSize'};
-    #}
-    
-    #This way this could be negative
-    $free = $total - $used;
-    #my $template = sp_temp_get(sp_get_template($cfg));
-        
-    my $replication = $template->{'data'}->{'replication'};
-    return ($total/$replication, $free/$replication, $used/$replication, 1);
+    return ($ours[0]->{'stored'}->{'capacity'}, $ours[0]->{'stored'}->{'free'}, $ours[0]->{'storedSize'}, 1);
 }
 
 sub parse_volname ($) {
