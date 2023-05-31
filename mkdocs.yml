@@ -28,6 +28,7 @@ site_url: https://repo.storpool.com/public/doc/pve/pve-storpool
 site_dir: site/docs
 nav:
   - 'index.md'
+  - 'Changelog': 'changes.md'
   - 'Data format definitions': 'data.md'
   - 'Installing the StorPool Proxmox integration': 'install.md'
   - 'To-do list': 'todo.md'
