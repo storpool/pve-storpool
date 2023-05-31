@@ -1333,6 +1333,7 @@ sub volume_snapshot_rollback {
     }
 
     my $snap_obj = $found[0];
+    sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
     sp_vol_revert_to_snapshot($cfg, $vol->{'globalId'}, $snap_obj->{'globalId'});
     
     return undef;
