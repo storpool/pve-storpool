@@ -12,9 +12,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## High priority
 
-- drop the `/etc/pve/storpool/proxmox.cfg` file handling, get the cluster name from
-  the Proxmox cluster's configuration
-- drop the `/etc/pve/storpool/api.cfg` file handling, go back to `storpool_confget`
 - figure out why the web UI shows a question mark icon next to the storage entry in
   the hierarchy tree
 
