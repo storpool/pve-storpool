@@ -501,10 +501,16 @@ sub sp_encode_volsnap_from_tags($) {
     my ($vol) = @_;
     my %tags = %{$vol->{'tags'}};
     
-    if ($vol->{'name'} !~ RE_NAME_GLOBAL_ID) {
-        log_and_die 'Only unnamed StorPool volumes and snapshots supported: '.Dumper($vol);
-    }
-    my $global_id = $+{'global_id'};
+    my $global_id = do {
+        if ($vol->{'snapshot'}) {
+            $vol->{'globalId'}
+        } else {
+            if ($vol->{'name'} !~ RE_NAME_GLOBAL_ID) {
+                log_and_die 'Only unnamed StorPool volumes supported: '.Dumper($vol);
+            }
+            $+{'global_id'}
+        }
+    };
 
     if ($tags{VTAG_TYPE()} eq 'iso') {
         if (!sp_is_empty($tags{VTAG_VM()}) ||
