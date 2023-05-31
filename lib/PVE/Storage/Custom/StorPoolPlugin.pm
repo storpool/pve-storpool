@@ -849,7 +849,6 @@ sub properties {
 sub options {
 
     return {
-	path => { fixed => 1 },
         nodes => { optional => 1 },
 	shared => { optional => 1 },
 	disable => { optional => 1 },
@@ -862,15 +861,6 @@ sub options {
 }
 
 # Storage implementation
-
-# The path has to be provided separately for iso file listing
-sub check_config {
-    my ($class, $sectionId, $config, $create, $skipSchemaCheck) = @_;
-
-    $config->{path} = "/dev/storpool-byid" if $create && !$config->{path};
-
-    return $class->SUPER::check_config($sectionId, $config, $create, $skipSchemaCheck);
-}
 
 # Just chech value before accepting the request
 PVE::JSONSchema::register_format('pve-storage-replication', \&sp_parse_replication);
