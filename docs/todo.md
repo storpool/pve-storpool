@@ -7,8 +7,8 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## Discuss with others, determine priority
 
-- ask Johan whether they want to use the Proxmox VE backup server and, if needed, figure out
-  how to integrate it with our StorPool plugin and with StorPool volumecare
+- figure out how to integrate the Proxmox backup server with our StorPool plugin and
+  with StorPool volumecare
 
 ## High priority
 
