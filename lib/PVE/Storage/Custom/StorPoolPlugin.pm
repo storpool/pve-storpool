@@ -207,6 +207,14 @@ sub sp_volsnap_list($) {
 	return $res;
 }
 
+sub sp_volsnap_list_with_cache($$) {
+    my ($cfg, $cache) = @_;
+
+    # pp: this will probably need another level for a multicluster setup some day
+    $cache->{'storpool'}->{'volsnap'} //= sp_volsnap_list($cfg);
+    $cache->{'storpool'}->{'volsnap'}
+}
+
 sub sp_vol_list($) {
     my ($cfg) = @_;
 	my $res = sp_get($cfg, "VolumesList");
@@ -1118,12 +1126,12 @@ sub volume_size_info {
 
 }
 
-sub list_volumes {
-    my ($class, $storeid, $scfg, $vmid, $content_types) = @_;
+sub list_volumes_with_cache {
+    my ($class, $storeid, $scfg, $vmid, $content_types, $cache) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     my %ctypes = map { $_ => 1 } @{$content_types};
 
-    my $volStatus = sp_volsnap_list($cfg);
+    my $volStatus = sp_volsnap_list_with_cache($cfg, $cache);
     my $res = [];
 
     for my $vol (@{$volStatus->{'data'}->{'volumes'}}) {
@@ -1154,10 +1162,20 @@ sub list_volumes {
     return $res;
 }
 
+sub list_volumes {
+    my ($class, $storeid, $scfg, $vmid, $content_types) = @_;
+    return list_volumes_with_cache($class, $storeid, $scfg, $vmid, $content_types, {});
+}
+
 sub list_images {
     my ($class, $storeid, $scfg, $vmid, $vollist, $cache) = @_;
-    log_and_die "list_images(vmid=$vmid) not implemented yet" if defined($vmid);
-    $class->list_volumes($storeid, $scfg, $vmid, [keys %{$scfg->{content}}])
+
+    if (defined $vollist) {
+        log_and_die "TODO: list_images() with a volume list not implemented yet: ".Dumper(\$vmid, $vollist);
+    }
+
+    # pp: possibly optimize for the "only a single ID in @{$vollist}" case... maybe
+    return $class->list_volumes_with_cache($storeid, $scfg, $vmid, [keys %{$scfg->{content}}], $cache);
 }
 
 sub create_base {
