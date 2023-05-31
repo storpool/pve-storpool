@@ -1115,7 +1115,19 @@ sub volume_size_info {
     if (@vol_status != 1) {
         log_and_die "Internal StorPool error: expected exactly one $vol->{name} volume: ".Dumper(\@vol_status);
     }
+
+    # Right. So Proxmox seems to need these to be validated.
     my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
+    if ($size =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
+        $size = $+{'size'};
+    } else {
+        log_and_die "Internal error: unexpected size '$size' for $volname";
+    }
+    if ($used =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
+        $used = $+{'size'};
+    } else {
+        log_and_die "Internal error: unexpected storedSize '$used' for $volname";
+    }
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
     return wantarray ? ($size, 'raw', $used, undef) : $size;
