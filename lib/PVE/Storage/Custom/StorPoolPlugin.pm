@@ -992,7 +992,9 @@ sub status {
     if (@ours != 1) {
         log_and_die "StorPool internal error: expected exactly one '$name' entry in the 'template status' output, got ".Dumper(\@ours);
     }
-    return ($ours[0]->{'stored'}->{'capacity'}, $ours[0]->{'stored'}->{'free'}, $ours[0]->{'storedSize'}, 1);
+
+    my ($capacity, $free) = ($ours[0]->{'stored'}->{'capacity'}, $ours[0]->{'stored'}->{'free'});
+    return ($capacity, $free, $capacity - $free, 1);
 }
 
 sub parse_volname ($) {
