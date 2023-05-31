@@ -926,7 +926,7 @@ sub find_free_disk($ $) {
             ($vol->{'tags'}->{VTAG_VM()} // '') eq $vm_id;
 
         my $current_str = $vol->{'tags'}->{VTAG_DISK()};
-        if (defined $current_str) {
+        if (defined $current_str && $current_str ne 'state') {
             my $current = int $current_str;
             if ($current >= $disk_id) {
                 $disk_id = $current + 1;
