@@ -48,6 +48,13 @@ use constant {
 
     VTAG_V_PVE => 'pve',
 
+    RE_NAME_GLOBAL_ID => qr{
+        ^
+        [~]
+        (?P<global_id> $RE_GLOBAL_ID )
+        $
+    }x,
+
     RE_VOLNAME_ISO => qr{
         ^
         (?P<comment> .* )
@@ -485,7 +492,11 @@ sub sp_is_empty($) {
 sub sp_encode_volsnap_from_tags($) {
     my ($vol) = @_;
     my %tags = %{$vol->{'tags'}};
-    my $global_id = $vol->{'globalId'};
+    
+    if ($vol->{'name'} !~ RE_NAME_GLOBAL_ID) {
+        log_and_die 'Only unnamed StorPool volumes and snapshots supported: '.Dumper($vol);
+    }
+    my $global_id = $+{'global_id'};
 
     if ($tags{VTAG_TYPE()} eq 'iso') {
         if (!sp_is_empty($tags{VTAG_VM()}) ||
@@ -580,6 +591,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_ISO) {
         my ($comment, $global_id) = ($+{'comment'}, $+{'global_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::true,
             'globalId' => $global_id,
             'tags' => {
@@ -592,6 +604,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_IMG) {
         my ($comment, $global_id) = ($+{'comment'}, $+{'global_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::true,
             'globalId' => $global_id,
             'tags' => {
@@ -604,6 +617,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_SNAPSHOT) {
         my ($disk_id, $global_id, $parent_id, $snapshot, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'parent_id'}, $+{'snapshot'}, $+{'vm_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::true,
             'globalId' => $global_id,
             'tags' => {
@@ -619,6 +633,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_VMSTATE) {
         my ($global_id, $snapshot, $vm_id) = ($+{'global_id'}, $+{'snapshot'}, $+{'vm_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::false,
             'globalId' => $global_id,
             'tags' => {
@@ -633,6 +648,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_BASE) {
         my ($disk_id, $global_id, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'vm_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::true,
             'globalId' => $global_id,
             'tags' => {
@@ -647,6 +663,7 @@ sub sp_decode_volsnap_to_tags($) {
     if ($volname =~ RE_VOLNAME_DISK) {
         my ($disk_id, $global_id, $vm_id) = ($+{'disk_id'}, $+{'global_id'}, $+{'vm_id'});
         return {
+            'name' => "~$global_id",
             'snapshot' => JSON::false,
             'globalId' => $global_id,
             'tags' => {
@@ -1088,12 +1105,11 @@ sub volume_size_info {
     my $cfg = sp_cfg($scfg, $storeid);
     
     my $vol = sp_decode_volsnap_to_tags($volname);
-    my $global_id = $vol->{'globalId'};
     
     my $res = sp_vol_status($cfg);
-    my @vol_status = grep { $_->{'globalId'} eq $global_id } values %{$res->{'data'}};
+    my @vol_status = grep { $_->{'name'} eq $vol->{'name'} } values %{$res->{'data'}};
     if (@vol_status != 1) {
-        log_and_die "Internal StorPool error: expected exactly one $global_id volume: ".Dumper(\@vol_status);
+        log_and_die "Internal StorPool error: expected exactly one $vol->{name} volume: ".Dumper(\@vol_status);
     }
     my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
 
