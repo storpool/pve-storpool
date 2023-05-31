@@ -116,7 +116,7 @@ use constant {
         - (?P<vm_id> $RE_VM_ID )
         -state
         - (?P<snapshot> $RE_PROXMOX_ID )
-        \.raw
+        (?: \.raw )?
         $
     }x,
 };
