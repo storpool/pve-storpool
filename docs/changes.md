@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2023-06-01
+
 ### Incompatible changes
 
 - plugin:
@@ -64,5 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.1.0...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.0...main
+[0.2.0]: https://github.com/storpool/pve-storpool/compare/release/0.1.0...release%2F0.2.0
 [0.1.0]: https://github.com/storpool/pve-storpool/releases/tag/release%2F0.1.0
