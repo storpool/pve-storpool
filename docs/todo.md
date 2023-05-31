@@ -12,8 +12,6 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## High priority
 
-- `status()`: this should probably be changed, it processes the output of `disk list` now,
-  which was the old way of doing things; should we use `template status` in some way instead?
 - drop the `/etc/pve/storpool/proxmox.cfg` file handling, get the cluster name from
   the Proxmox cluster's configuration
 - drop the `/etc/pve/storpool/api.cfg` file handling, go back to `storpool_confget`
