@@ -23,41 +23,25 @@ Note: these steps will soon be replaced by installing a Debian package.
 - Perform these steps on all the Proxmox VE hosts which will need to access
   StorPool-backed volumes and snapshots.
 
-## Prepare the StorPool plugin configuration files
+## Check the status of the StorPool and Proxmox installation
 
-Note: these steps will soon be partly automated by a command-line helper tool.
-
-- Create the `storpool/` subdirectory within the Proxmox VE clustered filesystem:
+- Make sure the StorPool client (the `storpool_block` service) is operational:
   ``` sh
-  install -d -o root -g www-data -m 755 /etc/pve/storpool
+  systemctl status storpool_block.service
   ```
-- Specify the short name (A-Z, 0-9, dashes, dots) by which this Proxmox VE cluster
-  shall identify its StorPool volumes and snapshots (in the `pve-loc` StorPool tag);
-  create the `/etc/pve/storpool/proxmox.cfg` INI-style file:
+- Make sure the StorPool configuration includes the API access variables:
   ``` sh
-  [format.version]
-  major = 0
-  minor = 1
-
-  [id]
-  name = pmox-test
+  storpool_confshow -e SP_API_HTTP_HOST SP_API_HTTP_PORT SP_AUTH_TOKEN SP_OURID
   ```
-- Specify the way the StorPool plugin should access the StorPool API, for the present
-  copying some values from the StorPool configuration;
-  create the `/etc/pve/storpool/api.cfg` INI-style file:
+- Make sure the StorPool cluster sees this client as operational:
+  ```
+  storpool service list
+  storpool client status
+  ```
+- Make sure the Proxmox cluster is operational and has a sensible name configured:
   ``` sh
-  [format.version]
-  major = 0
-  minor = 1
-
-  [api]
-  host = 192.168.6.16
-  port = 81
-  auth_token = 4261665028086
-
-  [api.ourid]
-  first-hostname = 11
-  second-hostname = 12
+  pvesh get /cluster/status
+  pvesh get /cluster/status -output-format json | jq -r '.[] | select(.id == "cluster") | .name'
   ```
 
 ## Create a StorPool-backed Proxmox VE storage
