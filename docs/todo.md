@@ -12,15 +12,13 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## High priority
 
-- figure out why the web UI shows a question mark icon next to the storage entry in
-  the hierarchy tree
 
 ## Medium priority
 
 - create a monitoring/check tool for the qemu/kvm configuration of the running VMs
   (possibly also for the VM configuration?)
 - create a trivial Debian package that installs the StorPool plugin and restarts
-  the `pvedaemon` and `pveproxy` services
+  the `pvedaemon`, `pveproxy`, and `pvestatd` services
 
 ## Low priority
 
