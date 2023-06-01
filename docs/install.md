@@ -20,6 +20,12 @@ Note: these steps will soon be replaced by installing a Debian package.
   ``` sh
   install -o root -g root -m 644 StorPoolPlugin.pm /usr/share/perl5/PVE/Storage/Custom/
   ```
+- Restart the `pvedaemon`, `pveproxy`, and `pvestatd` long-running services so
+  they can pick up the StorPool plugin:
+  ``` sh
+  systemctl restart pvedaemon.service pveproxy.service pvestatd.service
+  systemctl status pvedaemon.service pveproxy.service pvestatd.service
+  ```
 - Perform these steps on all the Proxmox VE hosts which will need to access
   StorPool-backed volumes and snapshots.
 
