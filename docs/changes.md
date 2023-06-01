@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Other changes
+
+- documentation:
+    - installation instructions:
+        - note that the `pvedaemon`, `pveproxy`, and `pvestatd` services need to be
+          restarted after installing the StorPool plugin's Perl source file
+    - update the to-do list
+
 ## [0.2.0] - 2023-06-01
 
 ### Incompatible changes
