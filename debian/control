@@ -18,7 +18,6 @@ Package: pve-storpool
 Architecture: all
 Depends:
  libconfig-inifiles-perl,
- libdata-dumper-perl,
  libjson-perl,
  libpve-common-perl,
  libpve-storage-perl,
