@@ -1,0 +1,29 @@
+Source: pve-storpool
+Section: utils
+Priority: optional
+Maintainer: StorPool <support@storpool.com>
+Uploaders: Peter Pentchev <pp@storpool.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-sequence-single-binary,
+Standards-Version: 4.6.2
+Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
+Vcs-Git: https://github.com/storpool/pve-storpool.git -b debian/unstable
+Vcs-Browser: https://github.com/storpool/pve-storpool/tree/debian/unstable
+Rules-Requires-Root: no
+
+Package: pve-storpool
+Architecture: all
+Depends:
+ libconfig-inifiles-perl,
+ libdata-dumper-perl,
+ libjson-perl,
+ libpve-common-perl,
+ libpve-storage-perl,
+ libwww-perl,
+ ${misc:Depends},
+ ${perl:Depends},
+Multi-Arch: foreign
+Description: StorPool storage plugin for Proxmox VE
+ This package contains the StorPool storage plugin that lets Proxmox VE
+ place disks, snapshots, and ISO images onto a StorPool cluster.
