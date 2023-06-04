@@ -1,5 +1,5 @@
-pve-storpool (0.2.0-1) UNRELEASED; urgency=medium
+pve-storpool (0.2.0-1) unstable; urgency=medium
 
   * Initial upload.
 
- -- Peter Pentchev <pp@storpool.com>  Thu, 01 Jun 2023 16:44:55 +0300
+ -- Peter Pentchev <pp@storpool.com>  Sun, 04 Jun 2023 13:30:05 +0300
