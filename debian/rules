@@ -2,3 +2,7 @@
 
 %:
 	dh '$@'
+
+execute_before_dh_installdocs:
+	mkdir docs-renamed
+	cp -Rpv docs/ docs-renamed/markdown/
