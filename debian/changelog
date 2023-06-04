@@ -1,3 +1,11 @@
+pve-storpool (0.2.0-1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports.
+    - drop the dh-sequence-single-binary virtual build dependency
+    - for the present, only a nodoc build will succeed
+
+ -- Peter Pentchev <pp@storpool.com>  Sun, 04 Jun 2023 13:34:52 +0300
+
 pve-storpool (0.2.0-1) unstable; urgency=medium
 
   * Initial upload.

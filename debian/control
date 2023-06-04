@@ -5,7 +5,6 @@ Maintainer: StorPool <support@storpool.com>
 Uploaders: Peter Pentchev <pp@storpool.com>
 Build-Depends:
  debhelper-compat (= 13),
- dh-sequence-single-binary,
  mkdocs <!nodoc>,
  mkdocs-material <!nodoc>,
 Standards-Version: 4.6.2
