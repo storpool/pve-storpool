@@ -7,27 +7,25 @@ SPDX-License-Identifier: BSD-2-Clause
 
 ## Install the StorPool storage plugin file
 
-Note: these steps will soon be replaced by installing a Debian package.
+Perform these steps on all the Proxmox VE hosts which will need to access
+StorPool-backed volumes and snapshots:
 
-- Locate the Perl library tree where the Proxmox VE files are installed;
-  in a typical setup that should be the `/usr/share/perl5/` tree.
-  Make sure the is a `PVE/Storage/` directory within it.
-- If necessary, create the `PVE/Storage/Custom/` subdirectory in that tree:
-  ``` sh
-  install -d -o root -g root -m 755 /usr/share/perl5/PVE/Storage/Custom
+- Make sure the StorPool client (the `storpool_block` service) is
+  installed on the Proxmox host.
+- Point Apt at the StorPool Debian package repository for the `bullseye-backports`
+  suite; put the following lines into
+  the `/etc/apt/sources.list.d/storpool-backports.sources` file:
   ```
-- Copy the `StorPoolPlugin.pm` file into the `PVE/Storage/Custom/` subdirectory:
-  ``` sh
-  install -o root -g root -m 644 StorPoolPlugin.pm /usr/share/perl5/PVE/Storage/Custom/
+  Types: deb deb-src
+  URIs: https://repo.storpool.com/public/contrib/debian/
+  Suites: bullseye-backports
+  Components: main
+  Signed-By: /usr/share/keyrings/storpool-keyring.gpg
   ```
-- Restart the `pvedaemon`, `pveproxy`, and `pvestatd` long-running services so
-  they can pick up the StorPool plugin:
+- Install the `pve-storpool` package:
   ``` sh
-  systemctl restart pvedaemon.service pveproxy.service pvestatd.service
-  systemctl status pvedaemon.service pveproxy.service pvestatd.service
+  apt install pve-storpool
   ```
-- Perform these steps on all the Proxmox VE hosts which will need to access
-  StorPool-backed volumes and snapshots.
 
 ## Check the status of the StorPool and Proxmox installation
 
