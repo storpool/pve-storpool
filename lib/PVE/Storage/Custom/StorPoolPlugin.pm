@@ -423,6 +423,15 @@ sub sp_placementgroup_list($$) {
 	return $res;
 }
 
+sub sp_client_sync($$) {
+	my ($cfg, $client_id) = @_;
+
+	my $res = sp_get($cfg, "ClientConfigWait/$client_id");
+
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+	return $res;
+}
+
 sub sp_vol_revert_to_snapshot($$$) {
     my ($cfg, $vol_id, $snap_id) = @_;
 
@@ -1289,7 +1298,11 @@ sub volume_resize {
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     sp_vol_update($cfg, $vol->{'globalId'}, { 'size' => $size }, 0);
-    
+
+    # Make sure storpool_bd has told the kernel to update
+    # the attached volume's size if needed
+    my $res = sp_client_sync($cfg, $cfg->{'api'}->{'ourid'});
+
     return 1;
 }
 
