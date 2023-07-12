@@ -12,6 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2023-07-12
+
+### Fixes
+
+- plugin:
+    - fix a race when resizing a locally-attached volume
+
+### Additions
+
+- config validator:
+    - add an experimental Rust tool, not distributed yet, for validating
+      the current configuration of StorPool volumes attached to Proxmox
+      virtual machines
+
+### Other changes
+
+- documentation:
+    - installation instructions:
+        - note that the `pvedaemon`, `pveproxy`, and `pvestatd` services need to be
+          restarted after installing the StorPool plugin's Perl source file
+        - provide installation instructions for the Debian package of the StorPool
+          Proxmox plugin
+        - drop some sections that did not really serve a useful purpose
+    - drop the to-do list, it is tracked elsewhere at StorPool
+
 ## [0.2.0] - 2023-06-01
 
 ### Incompatible changes
@@ -66,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.0...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.1...main
+[0.2.1]: https://github.com/storpool/pve-storpool/compare/release/0.2.0...release%2F0.2.1
 [0.2.0]: https://github.com/storpool/pve-storpool/compare/release/0.1.0...release%2F0.2.0
 [0.1.0]: https://github.com/storpool/pve-storpool/releases/tag/release%2F0.1.0

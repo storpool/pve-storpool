@@ -23,7 +23,7 @@ use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
 
-use version; our $VERSION = version->declare("v0.2.0");
+use version; our $VERSION = version->declare("v0.2.1");
 use base qw(PVE::Storage::Plugin);
 
 my ($RE_DISK_ID, $RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
@@ -419,6 +419,15 @@ sub sp_placementgroup_list($$) {
 	
 	my $res = sp_get($cfg, "PlacementGroupDescribe/$pg");
 	
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+	return $res;
+}
+
+sub sp_client_sync($$) {
+	my ($cfg, $client_id) = @_;
+
+	my $res = sp_get($cfg, "ClientConfigWait/$client_id");
+
 	die $res->{'error'}->{'descr'} if ($res->{'error'});
 	return $res;
 }
@@ -1289,7 +1298,11 @@ sub volume_resize {
 
     my $vol = sp_decode_volsnap_to_tags($volname);
     sp_vol_update($cfg, $vol->{'globalId'}, { 'size' => $size }, 0);
-    
+
+    # Make sure storpool_bd has told the kernel to update
+    # the attached volume's size if needed
+    my $res = sp_client_sync($cfg, $cfg->{'api'}->{'ourid'});
+
     return 1;
 }
 

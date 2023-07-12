@@ -10,5 +10,4 @@ the StorPool storage backend.
 
 - [Data format definitions](data.md)
 - [Installing the StorPool Proxmox integration](install.md)
-- [To-do list](todo.md)
 - [Changelog](changes.md)
