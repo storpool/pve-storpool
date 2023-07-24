@@ -453,7 +453,7 @@ sub sp_client_sync($$) {
 sub sp_vol_revert_to_snapshot($$$) {
     my ($cfg, $vol_id, $snap_id) = @_;
 
-    my $req = { 'toSnapshot' => "~$snap_id" };
+    my $req = { 'toSnapshot' => "~$snap_id", 'revertSize' => JSON::true };
     my $res = sp_post($cfg, "VolumeRevert/~$vol_id", $req);
 
     die "Storpool: ".$res->{'error'}->{'descr'} if $res->{'error'};
