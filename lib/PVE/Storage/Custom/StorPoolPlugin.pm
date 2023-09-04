@@ -152,7 +152,7 @@ sub sp_post($$$) {
 }
 
 # HTTP request to the storpool api
-sub sp_request($$$){
+sub sp_request($$$$){
 	my ($cfg, $method, $addr, $params) = @_;
 	
 	return undef if ( ${^GLOBAL_PHASE} eq 'START' );
