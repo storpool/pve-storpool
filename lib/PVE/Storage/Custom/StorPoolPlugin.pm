@@ -120,6 +120,8 @@ use constant {
         (?: \.raw )?
         $
     }x,
+
+	SP_PVE_Q_LOG => '/var/log/storpool/pve-storpool-query.log',
 };
 
 my $SP_VERS = '1.0';
@@ -151,6 +153,21 @@ sub sp_post($$$) {
 	return $res
 }
 
+sub sp_request_log_response($$$$) {
+	my ($cfg, $method, $addr, $response) = @_;
+	my $outf;
+	open($outf, '>>', SP_PVE_Q_LOG) or do {
+		warn("Could not open the ".SP_PVE_Q_LOG." logfile: $!\n");
+		return;
+	};
+	my $content = $response->decoded_content;
+	chomp $content;
+	say $outf gmtime()." [$$] Q $method $addr ".$response->code.' '.substr($content, 0, 1024).
+		(length($content) > 1024 ? '...' : '') or
+		warn("Could not append to the ".SP_PVE_Q_LOG." logfile: $!\n");
+	close $outf or warn("Could not close the ".SP_PVE_Q_LOG." logfile after appending to it: $!\n");
+}
+
 # HTTP request to the storpool api
 sub sp_request($$$$){
 	my ($cfg, $method, $addr, $params) = @_;
@@ -166,6 +183,7 @@ sub sp_request($$$$){
 	my $ua = new LWP::UserAgent;
 	$ua->timeout(2 * 60 * 60);
 	my $response = $ua->request($p);
+	sp_request_log_response($cfg, $method, $addr, $response);
 	if ($response->code eq "200"){
 		return decode_json($response->content);
 	}else{
