@@ -460,6 +460,11 @@ sub sp_vol_revert_to_snapshot($$$) {
     return $res
 }
 
+sub sp_snap_not_gone($) {
+    my ($snap) = @_;
+	return substr(($snap->{'name'} // ''), 0, 1) ne '*'
+}
+
 sub sp_is_ours($$%) {
     my ($cfg, $vol, %named) = @_;
 
@@ -472,6 +477,7 @@ sub sp_volume_find_snapshots($$$) {
     my ($cfg, $vol, $snap) = @_;
 
     grep {
+        sp_snap_not_gone($_) &&
         sp_is_ours($cfg, $_) &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
@@ -1415,6 +1421,7 @@ sub delete_store {
 	}
 
 	foreach my $snap (@{$snaps_hash->{data}}){
+                next unless sp_snap_not_gone($snap);
                 next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) &&
                     sp_vol_tag_is($snap, VTAG_LOC, sp_get_loc_name($cfg));
                 next unless $snap->{'templateName'} eq sp_get_template($cfg);
