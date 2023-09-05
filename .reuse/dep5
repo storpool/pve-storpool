@@ -1,0 +1,9 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: pve-storpool
+Upstream-Contact: StorPool <support@storpool.com>
+Source: https://github.com/storpool/pve-storpool
+
+Files:
+  rust/Cargo.lock
+Copyright: StorPool <support@storpool.com>
+License: BSD-2-Clause
