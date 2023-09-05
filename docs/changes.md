@@ -12,6 +12,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- plugin:
+    - ignore already-deleted StorPool snapshots - ones with names starting with
+      the asterisk character
+    - correct the Perl prototype of the `sp_request()` internal function
+
+### Additions
+
+- plugin:
+    - log the request method and URL, as well as part of the response, for
+      all requests sent to the StorPool API, to the new
+      `/var/log/storpool/pve-storpool-query.log` file.
+      For the present this is unconditional, it may be made configurable
+      in the future.
+
+### Other changes
+
+- plugin:
+    - correct two typographical errors in source code comments
+- documentation:
+    - point to version 1.1.0 of the "Keep a Changelog" specification
+- config validator:
+    - add SPDX copyright and license tags to all the Rust source files
+    - also keep the `Cargo.lock` file under version control
+- test suite:
+    - also run the `reuse` Tox environment by default
+    - use reuse 2.x with no changes
+    - ignore the `rust/target/` build directory in the SPDX tags check
+
 ## [0.2.1] - 2023-07-12
 
 ### Fixes
