@@ -1,4 +1,6 @@
 //! Various structures returned by the Proxmox VE API.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::collections::HashMap;
 use std::fmt::{Formatter, Result as FmtResult};

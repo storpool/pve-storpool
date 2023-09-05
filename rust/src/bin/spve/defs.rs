@@ -1,4 +1,6 @@
 //! Common definitions for the spve command-line tool.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::io::Error as IoError;
 use std::result::Result as StdResult;

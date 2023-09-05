@@ -1,4 +1,6 @@
 //! A command-line tool for managing StorPool-backed Proxmox VE storage.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::collections::HashMap;
 
