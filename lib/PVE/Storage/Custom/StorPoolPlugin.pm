@@ -902,7 +902,7 @@ sub options {
 
 # Storage implementation
 
-# Just chech value before accepting the request
+# Just check value before accepting the request
 PVE::JSONSchema::register_format('pve-storage-replication', \&sp_parse_replication);
 sub sp_parse_replication {
     my ($rep, $noerr) = @_;
@@ -1334,7 +1334,7 @@ sub deactivate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
     log_and_die "deactivate_storage($storeid) not implemented yet";
 
-    #TODO this does NOT occur when deleteing a storage
+    #TODO this does NOT occur when deleting a storage
     
 }
 
