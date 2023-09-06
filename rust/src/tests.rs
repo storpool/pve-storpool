@@ -1,4 +1,6 @@
 //! Unit-style tests for the Proxmox VE API bindings.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::collections::HashMap;
 use std::env::{self, VarError as EnvError};

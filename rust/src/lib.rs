@@ -17,6 +17,8 @@
 //! # Ok(())
 //! # }
 //! ```
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 #![allow(clippy::pub_use)]
 

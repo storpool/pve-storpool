@@ -1,5 +1,6 @@
 # SPDX-FileCopyrightText: StorPool <support@storpool.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+rust/target/
 site/
 .tox/

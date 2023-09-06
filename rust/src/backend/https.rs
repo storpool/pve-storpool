@@ -1,4 +1,6 @@
 //! Access the Proxmox VE API via JSON-over-HTTPS.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use anyhow::{anyhow, Context};
 use itertools::Itertools;

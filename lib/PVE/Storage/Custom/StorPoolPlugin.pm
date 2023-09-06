@@ -23,7 +23,7 @@ use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
 
-use version; our $VERSION = version->declare("v0.2.1");
+use version; our $VERSION = version->declare("v0.2.2");
 use base qw(PVE::Storage::Plugin);
 
 my ($RE_DISK_ID, $RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
@@ -120,6 +120,8 @@ use constant {
         (?: \.raw )?
         $
     }x,
+
+	SP_PVE_Q_LOG => '/var/log/storpool/pve-storpool-query.log',
 };
 
 my $SP_VERS = '1.0';
@@ -151,8 +153,23 @@ sub sp_post($$$) {
 	return $res
 }
 
+sub sp_request_log_response($$$$) {
+	my ($cfg, $method, $addr, $response) = @_;
+	my $outf;
+	open($outf, '>>', SP_PVE_Q_LOG) or do {
+		warn("Could not open the ".SP_PVE_Q_LOG." logfile: $!\n");
+		return;
+	};
+	my $content = $response->decoded_content;
+	chomp $content;
+	say $outf gmtime()." [$$] Q $method $addr ".$response->code.' '.substr($content, 0, 1024).
+		(length($content) > 1024 ? '...' : '') or
+		warn("Could not append to the ".SP_PVE_Q_LOG." logfile: $!\n");
+	close $outf or warn("Could not close the ".SP_PVE_Q_LOG." logfile after appending to it: $!\n");
+}
+
 # HTTP request to the storpool api
-sub sp_request($$$){
+sub sp_request($$$$){
 	my ($cfg, $method, $addr, $params) = @_;
 	
 	return undef if ( ${^GLOBAL_PHASE} eq 'START' );
@@ -166,6 +183,7 @@ sub sp_request($$$){
 	my $ua = new LWP::UserAgent;
 	$ua->timeout(2 * 60 * 60);
 	my $response = $ua->request($p);
+	sp_request_log_response($cfg, $method, $addr, $response);
 	if ($response->code eq "200"){
 		return decode_json($response->content);
 	}else{
@@ -442,6 +460,11 @@ sub sp_vol_revert_to_snapshot($$$) {
     return $res
 }
 
+sub sp_snap_not_gone($) {
+    my ($snap) = @_;
+	return substr(($snap->{'name'} // ''), 0, 1) ne '*'
+}
+
 sub sp_is_ours($$%) {
     my ($cfg, $vol, %named) = @_;
 
@@ -454,6 +477,7 @@ sub sp_volume_find_snapshots($$$) {
     my ($cfg, $vol, $snap) = @_;
 
     grep {
+        sp_snap_not_gone($_) &&
         sp_is_ours($cfg, $_) &&
         sp_vol_tag_is($_, VTAG_SNAP_PARENT, $vol->{'globalId'}) &&
         (!defined($snap) || sp_vol_tag_is($_, VTAG_SNAP, $snap))
@@ -878,7 +902,7 @@ sub options {
 
 # Storage implementation
 
-# Just chech value before accepting the request
+# Just check value before accepting the request
 PVE::JSONSchema::register_format('pve-storage-replication', \&sp_parse_replication);
 sub sp_parse_replication {
     my ($rep, $noerr) = @_;
@@ -1310,7 +1334,7 @@ sub deactivate_storage {
     my ($class, $storeid, $scfg, $cache) = @_;
     log_and_die "deactivate_storage($storeid) not implemented yet";
 
-    #TODO this does NOT occur when deleteing a storage
+    #TODO this does NOT occur when deleting a storage
     
 }
 
@@ -1397,6 +1421,7 @@ sub delete_store {
 	}
 
 	foreach my $snap (@{$snaps_hash->{data}}){
+                next unless sp_snap_not_gone($snap);
                 next unless sp_vol_tag_is($snap, VTAG_VIRT, VTAG_V_PVE) &&
                     sp_vol_tag_is($snap, VTAG_LOC, sp_get_loc_name($cfg));
                 next unless $snap->{'templateName'} eq sp_get_template($cfg);

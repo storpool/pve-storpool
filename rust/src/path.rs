@@ -1,4 +1,6 @@
 //! Build a query path for a Proxmox VE API request.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::fmt::Debug;
 

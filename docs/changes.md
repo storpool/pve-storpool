@@ -7,10 +7,42 @@ SPDX-License-Identifier: BSD-2-Clause
 
 All notable changes to the pve-storpool project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.2] - 2023-09-06
+
+### Fixes
+
+- plugin:
+    - ignore already-deleted StorPool snapshots - ones with names starting with
+      the asterisk character
+    - correct the Perl prototype of the `sp_request()` internal function
+
+### Additions
+
+- plugin:
+    - log the request method and URL, as well as part of the response, for
+      all requests sent to the StorPool API, to the new
+      `/var/log/storpool/pve-storpool-query.log` file.
+      For the present this is unconditional, it may be made configurable
+      in the future.
+
+### Other changes
+
+- plugin:
+    - correct two typographical errors in source code comments
+- documentation:
+    - point to version 1.1.0 of the "Keep a Changelog" specification
+- config validator:
+    - add SPDX copyright and license tags to all the Rust source files
+    - also keep the `Cargo.lock` file under version control
+- test suite:
+    - also run the `reuse` Tox environment by default
+    - use reuse 2.x with no changes
+    - ignore the `rust/target/` build directory in the SPDX tags check
 
 ## [0.2.1] - 2023-07-12
 
@@ -91,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.1...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.2...main
+[0.2.2]: https://github.com/storpool/pve-storpool/compare/release/0.2.1...release%2F0.2.2
 [0.2.1]: https://github.com/storpool/pve-storpool/compare/release/0.2.0...release%2F0.2.1
 [0.2.0]: https://github.com/storpool/pve-storpool/compare/release/0.1.0...release%2F0.2.0
 [0.1.0]: https://github.com/storpool/pve-storpool/releases/tag/release%2F0.1.0

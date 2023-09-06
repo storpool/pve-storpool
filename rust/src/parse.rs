@@ -1,4 +1,6 @@
 //! Parse various Proxmox VE configuration and status strings.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::collections::HashMap;
 use std::iter;
