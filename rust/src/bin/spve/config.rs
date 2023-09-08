@@ -1,4 +1,6 @@
 //! Parse the configuration files for the spve tool.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::collections::HashMap;
 use std::fs;

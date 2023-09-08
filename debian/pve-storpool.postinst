@@ -4,6 +4,35 @@ set -e
 
 #DEBHELPER#
 
+ensure_query_log() {
+	local logdir='/var/log/storpool'
+	local query_log="$logdir/pve-storpool-query.log"
+	if [ -e "$query_log" ]; then
+		echo "The $query_log file already exists"
+		return
+	fi
+
+	if [ ! -d "$logdir" ]; then
+		install -d -o root -g root -m 755 -- "$logdir"
+	fi
+
+	echo "Creating the $query_log file"
+	local tempf=''
+	tempf="$(mktemp -- "$query_log.XXXXXX")"
+	chown -- root:root "$tempf" || { rm -f -- "$tempf"; exit 1; }
+	chmod -- 0600 "$tempf" || { rm -f -- "$tempf"; exit 1; }
+	mv -- "$tempf" "$query_log" || { rm -f -- "$tempf"; exit 1; }
+}
+
+case "$1" in
+	configure)
+		ensure_query_log
+		;;
+
+	*)
+		;;
+esac
+
 deb-systemd-invoke reload-or-try-restart pvedaemon.service || true
 deb-systemd-invoke reload-or-try-restart pveproxy.service || true
 deb-systemd-invoke reload-or-try-restart pvestatd.service || true

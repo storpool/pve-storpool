@@ -1,4 +1,6 @@
 //! Parse the spve command-line - subcommands, options, etc.
+// SPDX-FileCopyrightText: StorPool <support@storpool.com>
+// SPDX-License-Identifier: BSD-2-Clause
 
 use std::io;
 

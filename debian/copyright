@@ -6,11 +6,11 @@ License: BSD-2-clause
 
 Files: *
 Copyright: StorPool <support@storpool.com>
-License: BSD-2-Clause
+License: BSD-2-clause
 
 Files: debian/*
 Copyright: StorPool <support@storpool.com>
-License: BSD-2-Clause
+License: BSD-2-clause
 
 License: BSD-2-clause
   Redistribution and use in source and binary forms, with or without

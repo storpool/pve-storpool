@@ -1,6 +1,9 @@
+# SPDX-FileCopyrightText: StorPool <support@storpool.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
 [package]
 name = "proxmoxy"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 rust-version = "1.61"
 authors = ["StorPool <support@storpool.com>"]
