@@ -1,3 +1,9 @@
+pve-storpool (0.2.2-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- Peter Pentchev <pp@storpool.com>  Mon, 11 Sep 2023 16:27:44 +0300
+
 pve-storpool (0.2.2-1) unstable; urgency=medium
 
   * Correct the BSD-2-clause license name in the copyright file.
