@@ -46,6 +46,7 @@ use constant {
     VTAG_COMMENT => 'pve-comment',
     VTAG_SNAP => 'pve-snap',
     VTAG_SNAP_PARENT => 'pve-snap-v',
+    VTAG_FQVMN => 'pve-fqvmn',
 
     VTAG_V_PVE => 'pve',
 
@@ -924,15 +925,17 @@ sub activate_storage {
     sp_temp_get($cfg, sp_get_template($cfg));
 }
 
-sub sp_get_tags($) {
-    my ($cfg) = @_;
+sub sp_get_tags($; $) {
+    my ($cfg, $vmid) = @_;
 
     my $extra_spec = $cfg->{'scfg'}->{'extra-tags'} // '';
     my %extra_tags = map { split /=/, $_, 2 } split /\s+/, $extra_spec;
+    my $loc_name = sp_get_loc_name($cfg);
     return (
         VTAG_VIRT() => VTAG_V_PVE,
-        VTAG_LOC() => sp_get_loc_name($cfg),
+        VTAG_LOC() => $loc_name,
         VTAG_STORE() => $cfg->{'storeid'},
+        (defined($vmid) ? (VTAG_FQVMN() => "$loc_name:$vmid"): ()),
         %extra_tags,
     );
 }
@@ -1003,7 +1006,7 @@ sub alloc_image {
     };
 
 	my $c_res = sp_vol_create($cfg, $size, sp_get_template($cfg), 0, {
-            sp_get_tags($cfg),
+            sp_get_tags($cfg, $vmid),
             VTAG_TYPE() => 'images',
             %extra_tags,
         });
@@ -1298,6 +1301,7 @@ sub clone_image {
             %{$current_tags},
             VTAG_BASE() => '0',
             VTAG_VM() => "$vmid",
+            VTAG_FQVNM() => $current_tags->{VTAG_LOC()}.":$vmid",
             (defined $disk_id ? (VTAG_DISK() => "$disk_id") : ()),
         };
     };
@@ -1354,7 +1358,7 @@ sub volume_snapshot {
     my $vol = sp_decode_volsnap_to_tags($volname);
     sp_vol_snapshot($cfg, $vol->{'globalId'}, 0, {
         %{$vol->{tags}},
-        sp_get_tags($cfg),
+        sp_get_tags($cfg, $vol->{tags}->{VTAG_VM()}),
         VTAG_SNAP() => $snap,
         VTAG_SNAP_PARENT() => $vol->{'globalId'},
     });
@@ -1441,6 +1445,7 @@ sub rename_volume($$$$$$) {
         'tags' => {
             %{$vol->{'tags'}},
             VTAG_VM() => $target_vmid,
+            VTAG_FQVMN() => sp_get_loc_name($cfg).":$target_vmid",
         },
     }, 0);
 
