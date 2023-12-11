@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- plugin:
+    - grow or shrink a volume as needed when reverting to a snapshot
+
 ## [0.2.2] - 2023-09-06
 
 ### Fixes
