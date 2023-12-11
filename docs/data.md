@@ -48,8 +48,6 @@ Some field clarifications:
 - `pve-type`: string: the content type of the Proxmox VE object stored in this volume or
   snapshot, e.g. "images", "iso", etc.
 - `pve-vm`: integer: the ID of the Proxmox VE virtual machine that this object belongs to
-- `pve-fqvmn`: the fully-qualified VM name: the contents of the `pve-loc` and `pve-vm`
-  tags, separated by a colon (`:`)
 - `pve-disk`: integer: a monotonically increasing "number" of the disk within that VM
 - `pve-base`: boolean: is this a base image, e.g. a disk belonging to a VM template as
   opposed to one belonging to an actual VM
