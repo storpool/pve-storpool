@@ -8,6 +8,7 @@ Build-Depends:
  dh-sequence-single-binary,
  mkdocs <!nodoc>,
  mkdocs-material <!nodoc>,
+ python3-pymdownx <!nodoc>,
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
 Vcs-Git: https://github.com/storpool/pve-storpool.git -b debian/unstable
