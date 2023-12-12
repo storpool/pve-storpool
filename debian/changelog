@@ -1,3 +1,10 @@
+pve-storpool (0.2.3-1~bpo11+1) bullseye-backports; urgency=medium
+
+  * Rebuild for bullseye-backports.
+  * Drop the sp-pve-fixes dependency, we do not need it for Proxmox 7.x yet.
+
+ -- Peter Pentchev <pp@storpool.com>  Tue, 12 Dec 2023 10:39:45 +0200
+
 pve-storpool (0.2.3-1~bpo12+1) bookworm-backports; urgency=medium
 
   * Rebuild for bookworm-backports.

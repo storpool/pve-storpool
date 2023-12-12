@@ -22,7 +22,6 @@ Depends:
  libpve-common-perl,
  libpve-storage-perl,
  libwww-perl,
- sp-pve-fixes,
  ${misc:Depends},
  ${perl:Depends},
 Multi-Arch: foreign
