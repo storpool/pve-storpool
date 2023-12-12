@@ -1,3 +1,9 @@
+pve-storpool (0.2.3-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Peter Pentchev <pp@storpool.com>  Mon, 11 Dec 2023 22:44:51 +0200
+
 pve-storpool (0.2.2-1) unstable; urgency=medium
 
   * Correct the BSD-2-clause license name in the copyright file.
