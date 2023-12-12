@@ -1,6 +1,9 @@
 pve-storpool (0.2.3-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * Fix the docs build by adding a build dependency on python3-pymdownx.
+  * Depend on the sp-pve-fixes package to work around the pvedaemon HTTP
+    keep-alive problem for the present.
 
  -- Peter Pentchev <pp@storpool.com>  Mon, 11 Dec 2023 22:44:51 +0200
 
