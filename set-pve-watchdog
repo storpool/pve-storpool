@@ -1,0 +1,119 @@
+#!/bin/bash
+
+set -euo pipefail
+
+pname=$(basename "$0")
+usage="
+Usage: $pname <storpool|pve>
+Sets the active PVE HA watchdog - StorPool's sp-watchdog-mux replacement or the default watchdog-mux
+This script will put the node in maintenance mode, wait for resources to be migrated, enable the desired watchdog while disabling the other one, and
+"
+
+function plog() {
+    logger --id=$$ --tag "$pname" --stderr "$@"
+}
+
+watchdog="$1"
+if [[ $watchdog == "storpool" ]]; then
+    enable_svc="sp-watchdog-mux.service"
+    disable_svc="watchdog-mux.service"
+elif [[ $watchdog == "pve" ]]; then
+    enable_svc="watchdog-mux.service"
+    disable_svc="sp-watchdog-mux.service"
+else
+    echo "$usage"
+    exit 1
+fi
+
+if systemctl is-enabled "$enable_svc" &>/dev/null && ! systemctl is-enabled "$disable_svc" &>/dev/null; then
+    plog "Watchdog $watchdog ($enable_svc) already enabled, $disable_svc disabled"
+    exit 0
+fi
+plog "Will enable $watchdog watchdog ($enable_svc) and disable $disable_svc"
+
+plog "Enabling maintenance mode on node $HOSTNAME"
+ha-manager crm-command node-maintenance enable "$HOSTNAME"
+
+node_maintenance=0
+resources_migrated=0
+while true; do
+    ha_status=$(pvesh get cluster/ha/status/manager_status -output-format=json)
+
+    ha_services=$(echo "$ha_status" | jq -rc '(.manager_status.service_status[] | length) // 0')
+    if [[ $ha_services -eq 0 ]]; then
+        plog "No HA services in cluster, skipping maintenance"
+        node_maintenance=1
+        node_status="online"
+        resources=0
+        resources_migrated=1
+    fi
+
+    if [[ $node_maintenance -ne 1 ]]; then
+        node_status=$(
+            echo "$ha_status" | \
+            jq -rc --arg node "$HOSTNAME" '.manager_status.node_status[$node]'
+        )
+        if [[ $node_status == "maintenance" ]]; then
+            node_maintenance=1
+            plog "Node $HOSTNAME reached maintenance status"
+        fi
+    fi
+
+    if [[ $resources_migrated -ne 1 ]]; then
+        resources=$(
+            echo "$ha_status" | \
+            jq --arg node "$HOSTNAME" '(.manager_status.service_status[] | [select(.node == $node)] | length ) // 0'
+        )
+        if [[ $resources -eq 0 ]]; then
+            plog "All HA resources migrated"
+            resources_migrated=1
+        fi
+    fi
+
+    if [[ $node_maintenance -eq 1 && $resources_migrated -eq 1 ]]; then
+        plog "Node $HOSTNAME ready for sp-watchdog-mux (${resources} HA resources, status ${node_status})"
+        break
+    else
+        plog "Node $HOSTNAME not ready yet (${resources} HA resources, status ${node_status} )"
+        sleep 10
+    fi
+done
+
+plog "Enabling watchdog"
+plog "Stopping PVE HA services"
+systemctl stop pve-ha-crm pve-ha-lrm
+
+if systemctl is-enabled "$disable_svc"; then
+    plog "Masking $disable_svc"
+    systemctl mask --now "$disable_svc"
+fi
+
+plog "Enabling and starting $enable_svc"
+systemctl unmask "$enable_svc"
+if [[ $enable_svc != "watchdog-mux.service" ]]; then
+    systemctl enable --now "$enable_svc"
+fi
+
+plog "Starting PVE HA services"
+systemctl start pve-ha-crm pve-ha-lrm
+
+
+plog "Disabling maintenance mode on node $HOSTNAME"
+ha-manager crm-command node-maintenance disable "$HOSTNAME"
+
+while true; do
+    ha_status=$(pvesh get cluster/ha/status/manager_status -output-format=json)
+    node_status=$(
+        echo "$ha_status" | \
+        jq -rc --arg node "$HOSTNAME" '.manager_status.node_status[$node]'
+    )
+    if [[ $node_status == "online" ]]; then
+        plog "Node $HOSTNAME reached online status"
+        break
+    else
+        plog "Node $HOSTNAME status $node_status"
+        sleep 10
+    fi
+done
+
+plog "sp-watchdog-mux setup done on $HOSTNAME"
