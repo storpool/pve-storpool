@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: StorPool <support@storpool.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
+[tool.test-stages]
+stages = [
+  "@check and @quick and not @manual",
+  "@check and not @manual",
+]
