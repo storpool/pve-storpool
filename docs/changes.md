@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- documentation:
+    - correct the project's GitHub repository URL
+
 ### Additions
 
 - plugin:
