@@ -27,13 +27,13 @@ ensure_query_log() {
 case "$1" in
 	configure)
 		ensure_query_log
+
+		deb-systemd-invoke reload-or-try-restart pvedaemon.service || true
+		deb-systemd-invoke reload-or-try-restart pveproxy.service || true
+		deb-systemd-invoke reload-or-try-restart pvestatd.service || true
+		deb-systemd-invoke reload-or-try-restart pve-ha-lrm.service || true
 		;;
 
 	*)
 		;;
 esac
-
-deb-systemd-invoke reload-or-try-restart pvedaemon.service || true
-deb-systemd-invoke reload-or-try-restart pveproxy.service || true
-deb-systemd-invoke reload-or-try-restart pvestatd.service || true
-deb-systemd-invoke reload-or-try-restart pve-ha-lrm.service || true
