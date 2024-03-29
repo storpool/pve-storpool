@@ -21,7 +21,7 @@ theme:
         icon: material/weather-night
         name: Switch to light mode
 site_name: pve-storpool
-repo_url: https://github.com/ppenchev-storpool/pve-storpool
+repo_url: https://github.com/storpool/pve-storpool
 repo_name: pve-storpool
 site_author: ppentchev-storpool
 site_url: https://repo.storpool.com/public/doc/pve/pve-storpool
