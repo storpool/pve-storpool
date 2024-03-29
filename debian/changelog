@@ -1,3 +1,9 @@
+pve-storpool (0.2.4-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+
+ -- Peter Pentchev <pp@storpool.com>  Fri, 29 Mar 2024 14:54:11 +0200
+
 pve-storpool (0.2.3-1) unstable; urgency=medium
 
   * New upstream release.
