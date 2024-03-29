@@ -1,6 +1,8 @@
 pve-storpool (0.2.4-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * Honor ${mkdocs:Depends} for the binary package dependencies.
+  * In the post-install script, only restart services if "configure" is specified.
 
  -- Peter Pentchev <pp@storpool.com>  Fri, 29 Mar 2024 14:54:11 +0200
 
