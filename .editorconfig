@@ -30,6 +30,10 @@ tab_size = 8
 indent_style = space
 indent_size = 2
 
+[Makefile]
+indent_style = tab
+tab_size = 8
+
 [mkdocs.yml]
 indent_style = space
 indent_size = 2

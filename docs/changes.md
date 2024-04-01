@@ -12,6 +12,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2024-03-29
+
+### Fixes
+
+- documentation:
+    - correct the project's GitHub repository URL
+
+### Additions
+
+- plugin:
+    - when attaching VM-related StorPool volumes to a Proxmox VE hypervisor,
+      force-detach the volumes from any other hypervisors or StorPool clients except
+      during a live migration
+    - add the `PVE::HA::Resources::Custom::StorPoolPlugin` module to allow
+      the Proxmox VE HA services to migrate VMs with StorPool-backed volumes
+    - add a `Makefile` for easier installation
+
+### Other changes
+
+- documentation:
+    - use `mkdocstrings` 0.24 with no changes
+    - add configuration for the `publync` tool for easier publishing
+- test suite:
+    - add Tox environment tags for use with the `tox-stages` tool
+
 ## [0.2.3] - 2023-12-11
 
 ### Fixes
@@ -130,7 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.3...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.4...main
+[0.2.4]: https://github.com/storpool/pve-storpool/compare/release/0.2.3...release%2F0.2.4
 [0.2.3]: https://github.com/storpool/pve-storpool/compare/release/0.2.2...release%2F0.2.3
 [0.2.2]: https://github.com/storpool/pve-storpool/compare/release/0.2.1...release%2F0.2.2
 [0.2.1]: https://github.com/storpool/pve-storpool/compare/release/0.2.0...release%2F0.2.1

@@ -23,6 +23,7 @@ Depends:
  libpve-storage-perl,
  libwww-perl,
  ${misc:Depends},
+ ${mkdocs:Depends},
  ${perl:Depends},
 Multi-Arch: foreign
 Description: StorPool storage plugin for Proxmox VE
