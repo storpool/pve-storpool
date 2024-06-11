@@ -10,4 +10,5 @@ the StorPool storage backend.
 
 - [Data format definitions](data.md)
 - [Installing the StorPool Proxmox integration](install.md)
+- [StorPool HA watchdog replacement](watchdog.md)
 - [Changelog](changes.md)
