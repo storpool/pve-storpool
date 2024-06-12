@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2024-06-12
+
+### Additions
+
+- sp-watchdog-mux:
+  - introduced as replacement for PVE's watchdog-mux service in order to avoid
+    host reboots on PVE cluster quorum loss which may negatively impact
+    the StorPool cluster
+
 ## [0.2.4] - 2024-03-29
 
 ### Fixes
@@ -155,7 +164,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.2.4...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.3.0...main
+[0.3.0]: https://github.com/storpool/pve-storpool/compare/release/0.2.4...release%2F0.3.0
 [0.2.4]: https://github.com/storpool/pve-storpool/compare/release/0.2.3...release%2F0.2.4
 [0.2.3]: https://github.com/storpool/pve-storpool/compare/release/0.2.2...release%2F0.2.3
 [0.2.2]: https://github.com/storpool/pve-storpool/compare/release/0.2.1...release%2F0.2.2
