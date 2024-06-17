@@ -72,3 +72,30 @@ Note: this part may be partly automated by a command-line helper tool.
   ``` sh
   pvesm status
   ```
+
+## Enable StorPool's HCI HA watchdog
+
+When enabling StorPool's [replacement watchdog service](watchdog.md),
+the host will be put in maintenance mode in the cluster, which will migrate
+away all HA resources to another machine. After the watchdog service is
+replaced, the host will be returned to online mode.
+
+Replacement **must be done one host at a time**.
+
+To enable the StorPool watchdog replacement on a host:
+```sh
+/usr/lib/storpool/set-pve-watchdog storpool
+```
+
+You can also revert to the default PVE watchdog service if necessary:
+```sh
+/usr/lib/storpool/set-pve-watchdog pve
+```
+
+If the chosen watchdog service is already enabled, the script will exit early.
+You can verify the status of the StorPool and PVE watchdogs:
+```sh
+systemctl status sp-watchdog-mux.service
+systemctl status watchdog-mux.service
+```
+The service that is currently disabled will be masked.
