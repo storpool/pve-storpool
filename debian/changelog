@@ -1,3 +1,12 @@
+pve-storpool (0.3.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Depend on systemd (for sp-watchdog-mux)
+  * Ignore lintian rule "dir-or-file-in-opt"
+  * Create systemd service file path
+
+ -- StorPool <support@storpool.com>  Mon, 17 Jun 2024 15:18:05 +0000
+
 pve-storpool (0.2.4-1~bpo12+1) bookworm-backports; urgency=medium
 
   * Rebuild for bookworm-backports.

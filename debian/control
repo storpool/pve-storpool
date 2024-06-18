@@ -9,6 +9,7 @@ Build-Depends:
  mkdocs <!nodoc>,
  mkdocs-material <!nodoc>,
  python3-pymdownx <!nodoc>,
+ systemd,
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
 Vcs-Git: https://github.com/storpool/pve-storpool.git -b debian/unstable
@@ -24,6 +25,7 @@ Depends:
  libpve-storage-perl,
  libwww-perl,
  sp-pve-fixes,
+ systemd,
  ${misc:Depends},
  ${mkdocs:Depends},
  ${perl:Depends},
