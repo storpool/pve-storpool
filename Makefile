@@ -6,9 +6,12 @@ PVE_MODULES= \
 		PVE/Storage/Custom/StorPoolPlugin.pm \
 
 
-PREFIX?=	/usr
-SHAREDIR?=	${PREFIX}/share
-PVE_PERL?=	${SHAREDIR}/perl5
+PREFIX?=	   /usr
+SHAREDIR?=	   ${PREFIX}/share
+PVE_PERL?=	   ${SHAREDIR}/perl5
+LIB_SP?=       ${PREFIX}/lib/storpool
+OPT_SP_PVE?=   /opt/storpool/pve
+SP_PVE_UTILS?= ${OPT_SP_PVE}/sp_pve_utils
 
 BINOWN?=	root
 BINGRP?=	root
@@ -34,6 +37,17 @@ install: all
 				${MKDIR_P} -- "${DESTDIR}$$(dirname -- "${PVE_PERL}/$$relpath")"; \
 				${INSTALL_DATA} -- "lib/$$relpath" "${DESTDIR}${PVE_PERL}/$$relpath"; \
 			done; \
+			\
+			${MKDIR_P} -- "${DESTDIR}${OPT_SP_PVE}"; \
+			${INSTALL_PROGRAM} -- set-pve-watchdog "${DESTDIR}${OPT_SP_PVE}/set-pve-watchdog"; \
+			\
+			${MKDIR_P} -- "${DESTDIR}${SP_PVE_UTILS}"; \
+			${INSTALL_DATA}  -- python/src/sp_pve_utils/*.py "${DESTDIR}${SP_PVE_UTILS}"; \
+			${INSTALL_DATA} -- sp-watchdog-mux.service "${DESTDIR}/lib/systemd/system/sp-watchdog-mux.service"; \
+    		systemctl daemon-reload; \
+			if ! systemctl is-active sp-watchdog-mux.service; then \
+				systemctl mask --now sp-watchdog-mux.service; \
+			fi; \
 		}
 
 clean:
