@@ -42,16 +42,18 @@ plog "Will enable $watchdog watchdog ($enable_svc) and disable $disable_svc (for
 plog "Enabling maintenance mode on node $HOSTNAME"
 ha-manager crm-command node-maintenance enable "$HOSTNAME"
 
+skip_maintenance=0
 node_maintenance=0
 resources_migrated=0
 while true; do
     ha_status=$(pvesh get cluster/ha/status/manager_status -output-format=json)
 
-    ha_services=$(echo "$ha_status" | jq -rc '(.manager_status.service_status[] | length) // 0')
+    ha_services=$(echo "$ha_status" | jq -rc '[(try .manager_status.service_status[])] | length // 0')
     if [[ $ha_services -eq 0 ]]; then
         plog "No HA services in cluster, skipping maintenance"
+	    skip_maintenance=1
         node_maintenance=1
-        node_status="online"
+        node_status="sp-no-ha-services"
         resources=0
         resources_migrated=1
     fi
@@ -70,7 +72,7 @@ while true; do
     if [[ $resources_migrated -ne 1 ]]; then
         resources=$(
             echo "$ha_status" | \
-            jq --arg node "$HOSTNAME" '(.manager_status.service_status[] | [select(.node == $node)] | length ) // 0'
+            jq --arg node "$HOSTNAME" '[(try .manager_status.service_status[] | select(.node == $node))] | length // 0'
         )
         if [[ $resources -eq 0 ]]; then
             plog "All HA resources migrated"
@@ -102,14 +104,25 @@ if [[ $enable_svc != "watchdog-mux.service" ]]; then
     systemctl enable --now "$enable_svc"
 fi
 
+plog "Waiting for watchdog socket to appear"
+while [[ ! -S /run/watchdog-mux.sock ]]; do
+	echo "Watchdog socket still missing"
+	sleep 10
+done
+plog "Watchdog socket appeared"
+sleep 5
+
 plog "Starting PVE HA services"
 systemctl start pve-ha-crm pve-ha-lrm
-
 
 plog "Disabling maintenance mode on node $HOSTNAME"
 ha-manager crm-command node-maintenance disable "$HOSTNAME"
 
 while true; do
+    if [[ $skip_maintenance -eq 1 ]]; then
+       plog "Node $HOSTNAME skipped maintenance, not waiting for online status"
+       break
+    fi
     ha_status=$(pvesh get cluster/ha/status/manager_status -output-format=json)
     node_status=$(
         echo "$ha_status" | \
