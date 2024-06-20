@@ -5,6 +5,9 @@ set -euo pipefail
 pname=$(basename "$0")
 usage="
 Usage: $pname <storpool|pve>
+
+Set WD_FORCE=1 to disregard checks for the currently enabled watchdog.
+
 Sets the active PVE HA watchdog - StorPool's sp-watchdog-mux replacement or the default watchdog-mux
 This script will put the node in maintenance mode, wait for resources to be migrated,
 enable the desired watchdog while disabling the other one, and turn off maintenance mode.
@@ -15,6 +18,8 @@ gracefully between machines.
 function plog() {
     logger --id=$$ --tag "$pname" --stderr "$@"
 }
+
+WD_FORCE="${WD_FORCE:-0}"
 
 watchdog="${1:-none}"
 if [[ $watchdog == "storpool" ]]; then
@@ -28,11 +33,11 @@ else
     exit 1
 fi
 
-if systemctl is-enabled "$enable_svc" &>/dev/null && ! systemctl is-enabled "$disable_svc" &>/dev/null; then
+if [[ $WD_FORCE -eq 0 ]] && systemctl is-enabled "$enable_svc" &>/dev/null && ! systemctl is-enabled "$disable_svc" &>/dev/null; then
     plog "Watchdog $watchdog ($enable_svc) already enabled, $disable_svc disabled"
     exit 0
 fi
-plog "Will enable $watchdog watchdog ($enable_svc) and disable $disable_svc"
+plog "Will enable $watchdog watchdog ($enable_svc) and disable $disable_svc (forced=$WD_FORCE)"
 
 plog "Enabling maintenance mode on node $HOSTNAME"
 ha-manager crm-command node-maintenance enable "$HOSTNAME"
