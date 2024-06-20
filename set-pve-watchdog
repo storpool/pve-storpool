@@ -6,14 +6,17 @@ pname=$(basename "$0")
 usage="
 Usage: $pname <storpool|pve>
 Sets the active PVE HA watchdog - StorPool's sp-watchdog-mux replacement or the default watchdog-mux
-This script will put the node in maintenance mode, wait for resources to be migrated, enable the desired watchdog while disabling the other one, and
+This script will put the node in maintenance mode, wait for resources to be migrated,
+enable the desired watchdog while disabling the other one, and turn off maintenance mode.
+The script is meant to be run on one node at a time in order to allow HA resources to migrate
+gracefully between machines.
 "
 
 function plog() {
     logger --id=$$ --tag "$pname" --stderr "$@"
 }
 
-watchdog="$1"
+watchdog="${1:-none}"
 if [[ $watchdog == "storpool" ]]; then
     enable_svc="sp-watchdog-mux.service"
     disable_svc="watchdog-mux.service"
@@ -71,10 +74,10 @@ while true; do
     fi
 
     if [[ $node_maintenance -eq 1 && $resources_migrated -eq 1 ]]; then
-        plog "Node $HOSTNAME ready for sp-watchdog-mux (${resources} HA resources, status ${node_status})"
+	    plog "Node $HOSTNAME ready for sp-watchdog-mux (${resources} HA resource(s), status ${node_status})"
         break
     else
-        plog "Node $HOSTNAME not ready yet (${resources} HA resources, status ${node_status} )"
+	    plog "Node $HOSTNAME not ready yet (${resources} HA resource(s), status ${node_status} )"
         sleep 10
     fi
 done
