@@ -1,3 +1,10 @@
+pve-storpool (0.3.2-1) unstable; urgency=medium
+
+  * New upstream release 
+  * Make sure sp-watchdog-mux.service is masked by default
+
+ -- StorPool <support@storpool.com>  Tue, 09 Jul 2024 08:17:06 +0000
+
 pve-storpool (0.3.1-1~bpo12+1) bookworm-backports; urgency=medium
 
   * Rebuild for bookworm-backports.

@@ -12,6 +12,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2024-06-28
+
+### Fixes
+
+- sp-watchdog-mux:
+  - handle PVE clusters that have not yet ran HA resources in `set-pve-watchdog`
+  - help text and logging fixes in `set-pve-watchdog`
+
+### Additions
+- sp-watchdog-mux:
+  - add environment variable (`WD_FORCE=1`) option to skip checks for currently
+    active watchdog in `set-pve-watchdog` (mostly for testing purposes)
+
 ## [0.3.1] - 2024-06-17
 
 ### Fixes
