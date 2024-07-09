@@ -1,3 +1,9 @@
+pve-storpool (0.3.2-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- StorPool <support@storpool.com>  Tue, 09 Jul 2024 08:33:38 +0000
+
 pve-storpool (0.3.2-1) unstable; urgency=medium
 
   * New upstream release 
