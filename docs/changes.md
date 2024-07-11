@@ -183,7 +183,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial pre-release
 
-[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.3.0...main
+[Unreleased]: https://github.com/storpool/pve-storpool/compare/release/0.3.2...main
+[0.3.2]: https://github.com/storpool/pve-storpool/compare/release/0.3.1...release%2F0.3.2
+[0.3.1]: https://github.com/storpool/pve-storpool/compare/release/0.3.0...release%2F0.3.1
 [0.3.0]: https://github.com/storpool/pve-storpool/compare/release/0.2.4...release%2F0.3.0
 [0.2.4]: https://github.com/storpool/pve-storpool/compare/release/0.2.3...release%2F0.2.4
 [0.2.3]: https://github.com/storpool/pve-storpool/compare/release/0.2.2...release%2F0.2.3
