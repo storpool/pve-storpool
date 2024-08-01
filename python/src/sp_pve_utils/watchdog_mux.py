@@ -711,7 +711,7 @@ def main(
     if features:
         sys.exit("Internal error: how did we get to main() with features=True?")
 
-    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
     ctx.ensure_object(ConfigHolder)
     log = util.build_logger(debug=debug)
