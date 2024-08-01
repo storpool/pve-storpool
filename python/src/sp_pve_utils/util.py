@@ -9,6 +9,7 @@ import json
 import logging
 import subprocess  # noqa: S404
 import sys
+import time
 from typing import TYPE_CHECKING, Final
 
 
@@ -16,6 +17,9 @@ if TYPE_CHECKING:
     import click
 
 from . import defs
+
+
+PVE_CLUSTER_SLEEP_INTERVAL = 10
 
 
 def arg_features(_ctx: click.Context, _self: click.Parameter, value: bool) -> bool:  # noqa: FBT001
@@ -68,15 +72,42 @@ def build_logger(
 def get_pve_cluster(log: logging.Logger) -> str:
     """Get cluster name."""
     command = ["pvesh", "get", "cluster/status", "--output-format=json"]
-    log.debug("Getting PVE cluster name: %(command)s", {"command": command})
-    result = subprocess.run(
-        command,  # noqa: S603
-        timeout=5,
-        capture_output=True,
-        check=True,
-    )
 
-    json_res = json.loads(result.stdout)
-    cluster_info = next(item for item in json_res if item.get("type") == "cluster")
-    log.debug("PVE cluster name: %(name)s", {"name": cluster_info["name"]})
-    return str(cluster_info["name"])
+    def _get_cluster_name() -> str:
+        log.debug("Getting PVE cluster name: %(command)s", {"command": command})
+        try:
+            result = subprocess.run(
+                command,  # noqa: S603
+                timeout=5,
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            log.exception("Failed fetching PVE cluster information - no quorum?")
+            return ""
+        except FileNotFoundError:
+            log.exception("Failed fetching PVE cluster information - no pvesh executable?")
+            return ""
+
+        try:
+            cl_status = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            log.exception("Failed decoding PVE cluster JSON")
+            return ""
+
+        try:
+            cluster_info = next(item for item in cl_status if item.get("type") == "cluster")
+        except StopIteration:
+            log.exception("No PVE cluster information")
+            return ""
+
+        cluster_name = str(cluster_info.get("name", ""))
+        if not cluster_name:
+            log.error("Empty PVE cluster name")
+            return ""
+        log.debug("PVE cluster name: %(name)s", {"name": cluster_name})
+        return cluster_name
+
+    while not (cluster_name := _get_cluster_name()):
+        time.sleep(PVE_CLUSTER_SLEEP_INTERVAL)
+    return cluster_name
