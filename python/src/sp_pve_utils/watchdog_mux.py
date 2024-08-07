@@ -711,11 +711,11 @@ def main(
     if features:
         sys.exit("Internal error: how did we get to main() with features=True?")
 
-    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
     ctx.ensure_object(ConfigHolder)
     log = util.build_logger(debug=debug)
-    ctx.obj.cfg = Config(
+    config = Config(
         active_marker=active_marker,
         listen_socket=listen_socket,
         log=log,
@@ -723,6 +723,8 @@ def main(
         pve_cluster=util.get_pve_cluster(log),
         sp_ourid=int(spconfig.SPConfig().get("SP_OURID")),
     )
+    log.info("Loaded configuration: %s", config)
+    ctx.obj.cfg = config
 
 
 main.add_command(cmd_run)
