@@ -8,15 +8,3 @@ override_dh_auto_install:
 
 override_dh_installsystemd:
 	dh_installsystemd --no-start --no-enable --no-stop-on-upgrade sp-watchdog-mux.service
-
-ifeq (,$(filter nodoc,$(DEB_BUILD_OPTIONS) $(DEB_BUILD_PROFILES)))
-execute_before_dh_installdocs:
-	mkdir docs-renamed
-	cp -Rpv docs/ docs-renamed/markdown/
-
-	mkdocs build
-	cp -Rpv site/docs/ docs-renamed/html/
-
-execute_after_dh_installdocs:
-	dh_mkdocs
-endif

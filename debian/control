@@ -5,9 +5,7 @@ Maintainer: StorPool <support@storpool.com>
 Uploaders: Peter Pentchev <pp@storpool.com>
 Build-Depends:
  debhelper-compat (= 13),
- mkdocs <!nodoc>,
- mkdocs-material <!nodoc>,
- python3-pymdownx <!nodoc>,
+ dh-sequence-single-binary,
  systemd,
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
@@ -25,7 +23,6 @@ Depends:
  libwww-perl,
  systemd,
  ${misc:Depends},
- ${mkdocs:Depends},
  ${perl:Depends},
 Multi-Arch: foreign
 Description: StorPool storage plugin for Proxmox VE
