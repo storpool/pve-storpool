@@ -114,7 +114,7 @@ use constant {
         ^
         vm
         - (?P<vm_id> $RE_VM_ID )
-        -cloudinit-sp- (?P<global_id> $RE_GLOBAL_ID )
+        -cloudinit(-sp- (?P<global_id> $RE_GLOBAL_ID ))?
         \.raw
         $
     }x,
@@ -126,6 +126,15 @@ use constant {
         -state
         - (?P<snapshot> $RE_PROXMOX_ID )
         (?: \.raw )?
+        $
+    }x,
+
+    RE_FS_PATH => qr{
+        ^
+        (
+        /dev/storpool-byid/
+        $RE_GLOBAL_ID
+        )
         $
     }x,
 
@@ -421,6 +430,24 @@ sub sp_vol_update ($$$$) {
 	return $res
 }
 
+sub sp_find_cloudinit_vol ($$) {
+    my ($cfg, $vmid) = @_;
+
+    my ($newest, $vol_ci) = 0, undef;
+    my $volumes = sp_vol_list($cfg);
+    foreach my $vol (@{$volumes->{data}}) {
+        next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
+            sp_vol_tag_is($vol, VTAG_VM, $vmid) && 
+            sp_vol_tag_is($vol, VTAG_TYPE, 'images') && 
+            sp_vol_tag_is($vol, VTAG_DISK, 'cloudinit');
+        if ($vol->{creationTimestamp} > $newest) {
+            $newest = $vol->{creationTimestamp};
+            $vol_ci = $vol;
+        }
+    }
+    return $vol_ci;
+}
+
 sub sp_services_list($) {
     my ($cfg) = @_;
 	
@@ -647,15 +674,14 @@ sub sp_encode_volsnap_from_tags($) {
         log_and_die 'A disk image should specify a disk: '.Dumper($vol);
     }
     if ($tags{VTAG_DISK()} eq 'cloudinit') {
-        return "vm-$tags{VTAG_VM()}-cloudinit-sp-$global_id.raw";
+        return "vm-$tags{VTAG_VM()}-cloudinit.raw";
     }
 
     return "vm-$tags{VTAG_VM()}-disk-$tags{VTAG_DISK()}-sp-$global_id.raw";
 }
 
-sub sp_decode_volsnap_to_tags($) {
-    my ($volname) = @_;
-
+sub sp_decode_volsnap_to_tags($$) {
+    my ($volname, $cfg) = @_;
     if ($volname =~ RE_VOLNAME_ISO) {
         my ($comment, $global_id) = ($+{'comment'}, $+{'global_id'});
         return {
@@ -744,6 +770,10 @@ sub sp_decode_volsnap_to_tags($) {
 
     if ($volname =~ RE_VOLNAME_CLOUDINIT) {
         my ($global_id, $vm_id) = ($+{'global_id'}, $+{'vm_id'});
+        if (!defined $global_id) {
+            my $vol = sp_find_cloudinit_vol($cfg, $vm_id);
+            $global_id = $vol->{globalId};
+        }
         return {
             'name' => "~$global_id",
             'snapshot' => JSON::false,
@@ -1070,10 +1100,13 @@ sub status {
     return ($capacity, $free, $capacity - $free, 1);
 }
 
-sub parse_volname ($) {
-    my ($class, $volname) = @_;
+sub parse_volname ($;$) {
+    my ($class, $volname, $cfg) = @_;
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    # needed for decoding cloud-init volumes and not supplied by PVE::Storage
+    $cfg //= sp_cfg(undef, undef);
+
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
 
     return (
         $vol->{'tags'}->{VTAG_TYPE()},
@@ -1090,8 +1123,13 @@ sub filesystem_path {
     my ($class, $scfg, $volname, $snapname) = @_;
 
     my ($vtype, $name, $vmid) = $class->parse_volname("$volname");
-    
+
     my $path = "/dev/storpool-byid/$name";
+    if ($path =~ RE_FS_PATH) {
+        $path = $1; # untaint name value coming from SP API
+    } else {
+        log_and_die("StorPool internal error: bad block device path ${path}");
+    }
 
     return wantarray ? ($path, $vmid, $vtype) : $path;
 }
@@ -1119,7 +1157,7 @@ sub activate_volume {
 	
     my $path = $class->path($scfg, $volname, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my $global_id = $vol->{'globalId'};
 
     my $perms = $vol->{'snapshot'} ? 'ro' : 'rw';
@@ -1152,7 +1190,7 @@ sub deactivate_volume {
     
     return if ! -b $path;
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my $global_id = $vol->{'globalId'};
 
     # TODO: pp: remove this when the configuration goes into the plugin?
@@ -1162,7 +1200,7 @@ sub deactivate_volume {
 sub free_image {
     my ($class, $storeid, $scfg, $volname, $isBase) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $is_snapshot) = ($vol->{'globalId'}, $vol->{'snapshot'});
 
     # Volume could already be detached, we do not care about errors
@@ -1191,9 +1229,8 @@ sub volume_has_feature {
         rename => { current => 1, },
         sparseinit => { base => 1, current => 1, snap => 1 },
     };
-
     my ($vtype, $name, $vmid, , undef, undef, $isBase) =
-	$class->parse_volname($volname);
+	$class->parse_volname($volname, sp_cfg($scfg, $storeid));
 
     my $key = undef;
     if($snapname){
@@ -1215,7 +1252,7 @@ sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     
     my $res = sp_vol_status($cfg);
     my @vol_status = grep { $_->{'name'} eq $vol->{'name'} } values %{$res->{'data'}};
@@ -1297,7 +1334,7 @@ sub create_base {
     my ($class, $storeid, $scfg, $volname) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $vtype) = ($vol->{'globalId'}, $vol->{tags}->{VTAG_TYPE()});
     # my ($vtype, $name, $vmid, undef, undef, $isBase) =
 	# $class->parse_volname($volname);
@@ -1338,7 +1375,7 @@ sub clone_image {
     my ($class, $scfg, $storeid, $volname, $vmid, $snap) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     if ($snap) {
         my @found = sp_volume_find_snapshots($cfg, $vol, $snap);
         if (@found != 1) {
@@ -1362,7 +1399,7 @@ sub clone_image {
         my ($current_tags) = @_;
         my $disk_id;
         if (defined $current_tags->{VTAG_DISK()}) {
-            if ($current_tags->{VTAG_DISK} eq 'cloudinit') {
+            if ($current_tags->{VTAG_DISK()} eq 'cloudinit') {
                 $disk_id = 'cloudinit';
             } else {
                 $disk_id = find_free_disk($cfg, $vmid);
@@ -1395,7 +1432,7 @@ sub volume_resize {
     my $cfg = sp_cfg($scfg, $storeid);
 
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     sp_vol_update($cfg, $vol->{'globalId'}, { 'size' => $size }, 0);
 
     # Make sure storpool_bd has told the kernel to update
@@ -1426,7 +1463,7 @@ sub volume_snapshot {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     sp_vol_snapshot($cfg, $vol->{'globalId'}, 0, {
         %{$vol->{tags}},
         sp_get_tags($cfg),
@@ -1441,7 +1478,7 @@ sub volume_snapshot_delete {
     my ($class, $scfg, $storeid, $volname, $snap, $running) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     for my $snap_obj (sp_volume_find_snapshots($cfg, $vol, $snap)) {
         sp_snap_del($cfg, $snap_obj->{'globalId'}, 0);
     }
@@ -1453,7 +1490,7 @@ sub volume_snapshot_rollback {
     my ($class, $scfg, $storeid, $volname, $snap) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($volname);
+    my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my @found = sp_volume_find_snapshots($cfg, $vol, $snap);
     if (@found != 1) {
         log_and_die "volume_snapshot_rollback: expected exactly one '$snap' snapshot for $vol->{globalId}, got ".Dumper(\@found);
@@ -1511,7 +1548,7 @@ sub rename_volume($$$$$$) {
     my ($class, $scfg, $storeid, $source_volname, $target_vmid, $target_volname) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
 
-    my $vol = sp_decode_volsnap_to_tags($source_volname);
+    my $vol = sp_decode_volsnap_to_tags($source_volname, $cfg);
     sp_vol_update($cfg, $vol->{'globalId'}, {
         'tags' => {
             %{$vol->{'tags'}},
