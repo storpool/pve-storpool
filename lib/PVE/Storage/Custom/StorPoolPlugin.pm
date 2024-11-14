@@ -437,6 +437,7 @@ sub sp_find_cloudinit_vol ($$) {
     my $volumes = sp_vol_list($cfg);
     foreach my $vol (@{$volumes->{data}}) {
         next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
+            sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) &&
             sp_vol_tag_is($vol, VTAG_VM, $vmid) && 
             sp_vol_tag_is($vol, VTAG_TYPE, 'images') && 
             sp_vol_tag_is($vol, VTAG_DISK, 'cloudinit');
