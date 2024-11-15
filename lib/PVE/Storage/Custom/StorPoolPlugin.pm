@@ -23,7 +23,7 @@ use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
 
-use version; our $VERSION = version->declare("v0.4.0");
+use version; our $VERSION = version->declare("v0.4.1");
 use base qw(PVE::Storage::Plugin);
 
 my ($RE_DISK_ID, $RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
@@ -437,6 +437,7 @@ sub sp_find_cloudinit_vol ($$) {
     my $volumes = sp_vol_list($cfg);
     foreach my $vol (@{$volumes->{data}}) {
         next unless sp_vol_tag_is($vol, VTAG_VIRT, VTAG_V_PVE) &&
+            sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) &&
             sp_vol_tag_is($vol, VTAG_VM, $vmid) && 
             sp_vol_tag_is($vol, VTAG_TYPE, 'images') && 
             sp_vol_tag_is($vol, VTAG_DISK, 'cloudinit');
