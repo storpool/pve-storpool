@@ -1,3 +1,9 @@
+pve-storpool (0.4.1-1) unstable; urgency=medium
+
+  * New upstream release 
+
+ -- StorPool <support@storpool.com>  Fri, 15 Nov 2024 12:33:41 +0000
+
 pve-storpool (0.4.0-1) unstable; urgency=medium
 
   * New upstream release 
