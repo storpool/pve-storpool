@@ -18,6 +18,7 @@ use PVE::JSONSchema qw(get_standard_option);
 use Sys::Hostname;
 use Sys::Syslog qw(syslog);
 use List::Util qw'first';
+use Time::HiRes qw( time );
 
 use JSON;
 use LWP::UserAgent;
@@ -175,8 +176,8 @@ sub sp_post($$$) {
 	return $res
 }
 
-sub sp_request_log_response($$$$) {
-	my ($cfg, $method, $addr, $response) = @_;
+sub sp_request_log_response($$$$$) {
+	my ($cfg, $method, $addr, $response, $duration) = @_;
 	my $outf;
 	open($outf, '>>', SP_PVE_Q_LOG) or do {
 		warn("Could not open the ".SP_PVE_Q_LOG." logfile: $!\n");
@@ -184,7 +185,7 @@ sub sp_request_log_response($$$$) {
 	};
 	my $content = $response->decoded_content;
 	chomp $content;
-	say $outf gmtime()." [$$] Q $method $addr ".$response->code.' '.substr($content, 0, 1024).
+	say $outf gmtime()." [$$] Q " . sprintf("%.3f", $duration) . "s $method $addr ".$response->code.' '.substr($content, 0, 1024).
 		(length($content) > 1024 ? '...' : '') or
 		warn("Could not append to the ".SP_PVE_Q_LOG." logfile: $!\n");
 	close $outf or warn("Could not close the ".SP_PVE_Q_LOG." logfile after appending to it: $!\n");
@@ -204,8 +205,10 @@ sub sp_request($$$$){
 	
 	my $ua = new LWP::UserAgent;
 	$ua->timeout(2 * 60 * 60);
+    my $start = time();
 	my $response = $ua->request($p);
-	sp_request_log_response($cfg, $method, $addr, $response);
+    my $duration = time() - $start;
+	sp_request_log_response($cfg, $method, $addr, $response, $duration);
 	if ($response->code eq "200"){
 		return decode_json($response->content);
 	}else{
