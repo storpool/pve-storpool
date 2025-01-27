@@ -433,6 +433,16 @@ sub sp_vol_update ($$$$) {
 	return $res
 }
 
+sub sp_vol_desc($$) {
+	my ($cfg, $global_id) = @_;
+
+	my $res = sp_get($cfg, "VolumeDescribe/~$global_id");
+
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+
+	return $res
+}
+
 sub sp_find_cloudinit_vol ($$) {
     my ($cfg, $vmid) = @_;
 
@@ -1252,33 +1262,29 @@ sub volume_has_feature {
 #    my ($filename, $timeout) = @_;
 #}
 
+# We return the used volume space equal to the volume size because the API calls
+# to get the actual used space (e.g. VolumesSpace or VolumesGetStatus) are way
+# too slow, and can timeout issues. Caching them across the PVE cluster also
+# appears to be a non-trivial amount of work.
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     
-    my $res = sp_vol_status($cfg);
-    my @vol_status = grep { $_->{'name'} eq $vol->{'name'} } values %{$res->{'data'}};
-    if (@vol_status != 1) {
-        log_and_die "Internal StorPool error: expected exactly one $vol->{name} volume: ".Dumper(\@vol_status);
-    }
+    my $res = sp_vol_desc($cfg, $vol->{globalId});
+    my $vol_desc = $res->{data};
 
     # Right. So Proxmox seems to need these to be validated.
-    my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
+    my $size = $vol_desc->{'size'};
     if ($size =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
         $size = $+{'size'};
     } else {
         log_and_die "Internal error: unexpected size '$size' for $volname";
     }
-    if ($used =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
-        $used = $+{'size'};
-    } else {
-        log_and_die "Internal error: unexpected storedSize '$used' for $volname";
-    }
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
-    return wantarray ? ($size, 'raw', $used, undef) : $size;
+    return wantarray ? ($size, 'raw', $size, undef) : $size;
 
 }
 
