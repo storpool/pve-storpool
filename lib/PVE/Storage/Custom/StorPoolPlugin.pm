@@ -1208,7 +1208,7 @@ sub deactivate_volume {
     my $global_id = $vol->{'globalId'};
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_vol_detach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, 0, $vol->{'snapshot'});
+    sp_vol_attach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, 'ro', 0, $vol->{'snapshot'}, 0);
 }
 
 sub free_image {
