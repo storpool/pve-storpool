@@ -1096,7 +1096,8 @@ sub alloc_image {
         }
 
         my $vol = sp_vol_info_single($cfg, $global_id);
-        sp_encode_volsnap_from_tags($vol);
+        sp_vol_attach($cfg, $vol->{globalId}, $cfg->{'api'}->{'ourid'}, 'rw', 0, $vol->{snapshot}, 1);
+        return sp_encode_volsnap_from_tags($vol);
 }
 
 # Status of the space of the storage
