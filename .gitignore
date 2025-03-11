@@ -6,3 +6,5 @@ site/
 **/.tox/
 
 **/__pycache__/
+*.swp
+*.swo

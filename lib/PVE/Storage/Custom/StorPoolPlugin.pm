@@ -18,12 +18,13 @@ use PVE::JSONSchema qw(get_standard_option);
 use Sys::Hostname;
 use Sys::Syslog qw(syslog);
 use List::Util qw'first';
+use Time::HiRes qw( time );
 
 use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
 
-use version; our $VERSION = version->declare("v0.4.1");
+use version; our $VERSION = version->declare("v0.5.1");
 use base qw(PVE::Storage::Plugin);
 
 my ($RE_DISK_ID, $RE_GLOBAL_ID, $RE_PROXMOX_ID, $RE_VM_ID);
@@ -175,8 +176,8 @@ sub sp_post($$$) {
 	return $res
 }
 
-sub sp_request_log_response($$$$) {
-	my ($cfg, $method, $addr, $response) = @_;
+sub sp_request_log_response($$$$$) {
+	my ($cfg, $method, $addr, $response, $duration) = @_;
 	my $outf;
 	open($outf, '>>', SP_PVE_Q_LOG) or do {
 		warn("Could not open the ".SP_PVE_Q_LOG." logfile: $!\n");
@@ -184,7 +185,7 @@ sub sp_request_log_response($$$$) {
 	};
 	my $content = $response->decoded_content;
 	chomp $content;
-	say $outf gmtime()." [$$] Q $method $addr ".$response->code.' '.substr($content, 0, 1024).
+	say $outf gmtime()." [$$] Q " . sprintf("%.3f", $duration) . "s $method $addr ".$response->code.' '.substr($content, 0, 1024).
 		(length($content) > 1024 ? '...' : '') or
 		warn("Could not append to the ".SP_PVE_Q_LOG." logfile: $!\n");
 	close $outf or warn("Could not close the ".SP_PVE_Q_LOG." logfile after appending to it: $!\n");
@@ -204,8 +205,10 @@ sub sp_request($$$$){
 	
 	my $ua = new LWP::UserAgent;
 	$ua->timeout(2 * 60 * 60);
+    my $start = time();
 	my $response = $ua->request($p);
-	sp_request_log_response($cfg, $method, $addr, $response);
+    my $duration = time() - $start;
+	sp_request_log_response($cfg, $method, $addr, $response, $duration);
 	if ($response->code eq "200"){
 		return decode_json($response->content);
 	}else{
@@ -427,6 +430,16 @@ sub sp_vol_update ($$$$) {
 	my $res = sp_post($cfg, "VolumeUpdate/~$global_id", $req);
 	
 	die "Storpool: ".$res->{'error'}->{'descr'} if (!$ignoreError && $res->{'error'});
+	return $res
+}
+
+sub sp_vol_desc($$) {
+	my ($cfg, $global_id) = @_;
+
+	my $res = sp_get($cfg, "VolumeDescribe/~$global_id");
+
+	die $res->{'error'}->{'descr'} if ($res->{'error'});
+
 	return $res
 }
 
@@ -1083,7 +1096,8 @@ sub alloc_image {
         }
 
         my $vol = sp_vol_info_single($cfg, $global_id);
-        sp_encode_volsnap_from_tags($vol);
+        sp_vol_attach($cfg, $vol->{globalId}, $cfg->{'api'}->{'ourid'}, 'rw', 0, $vol->{snapshot}, 1);
+        return sp_encode_volsnap_from_tags($vol);
 }
 
 # Status of the space of the storage
@@ -1195,7 +1209,7 @@ sub deactivate_volume {
     my $global_id = $vol->{'globalId'};
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_vol_detach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, 0, $vol->{'snapshot'});
+    sp_vol_attach($cfg, $global_id, $cfg->{'api'}->{'ourid'}, 'ro', 0, $vol->{'snapshot'}, 0);
 }
 
 sub free_image {
@@ -1249,33 +1263,29 @@ sub volume_has_feature {
 #    my ($filename, $timeout) = @_;
 #}
 
+# We return the used volume space equal to the volume size because the API calls
+# to get the actual used space (e.g. VolumesSpace or VolumesGetStatus) are way
+# too slow, and can timeout issues. Caching them across the PVE cluster also
+# appears to be a non-trivial amount of work.
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
     
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     
-    my $res = sp_vol_status($cfg);
-    my @vol_status = grep { $_->{'name'} eq $vol->{'name'} } values %{$res->{'data'}};
-    if (@vol_status != 1) {
-        log_and_die "Internal StorPool error: expected exactly one $vol->{name} volume: ".Dumper(\@vol_status);
-    }
+    my $res = sp_vol_desc($cfg, $vol->{globalId});
+    my $vol_desc = $res->{data};
 
     # Right. So Proxmox seems to need these to be validated.
-    my ($size, $used) = ($vol_status[0]->{'size'}, $vol_status[0]->{'storedSize'});
+    my $size = $vol_desc->{'size'};
     if ($size =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
         $size = $+{'size'};
     } else {
         log_and_die "Internal error: unexpected size '$size' for $volname";
     }
-    if ($used =~ /^ (?P<size> 0 | [1-9][0-9]* ) $/x) {
-        $used = $+{'size'};
-    } else {
-        log_and_die "Internal error: unexpected storedSize '$used' for $volname";
-    }
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
-    return wantarray ? ($size, 'raw', $used, undef) : $size;
+    return wantarray ? ($size, 'raw', $size, undef) : $size;
 
 }
 
