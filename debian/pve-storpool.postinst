@@ -28,10 +28,6 @@ case "$1" in
 	configure)
 		ensure_query_log
 
-		if ! deb-systemd-invoke is-enabled sp-watchdog-mux.service; then
-			systemctl mask sp-watchdog-mux.service
-		fi
-
 		deb-systemd-invoke reload-or-try-restart pvedaemon.service || true
 		deb-systemd-invoke reload-or-try-restart pveproxy.service || true
 		deb-systemd-invoke reload-or-try-restart pvestatd.service || true
