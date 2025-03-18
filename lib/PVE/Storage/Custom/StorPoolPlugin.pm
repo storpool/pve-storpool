@@ -282,7 +282,7 @@ sub sp_vol_info_single($$) {
     my ($cfg, $global_id) = @_;
 
     my $res = sp_vol_info($cfg, $global_id);
-    if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
+    if (!defined($res->{'data'}) || ref($res->{'data'}) ne 'ARRAY' || @{$res->{'data'}} != 1) {
         log_and_die("Internal StorPool error: expected exactly one volume with the $global_id global ID, got ".Dumper($res));
     }
     $res->{'data'}->[0]
@@ -292,7 +292,7 @@ sub sp_snap_info_single($$) {
     my ($cfg, $global_id) = @_;
 
     my $res = sp_snap_info($cfg, $global_id);
-    if (!defined($res->{'data'}) || ref($res->{'data'} ne 'ARRAY') || @{$res->{'data'}} != 1) {
+    if (!defined($res->{'data'}) || ref($res->{'data'}) ne 'ARRAY' || @{$res->{'data'}} != 1) {
         log_and_die("Internal StorPool error: expected exactly one snapshot with the $global_id global ID, got ".Dumper($res));
     }
     $res->{'data'}->[0]
@@ -1270,11 +1270,16 @@ sub volume_has_feature {
 sub volume_size_info {
     my ($class, $scfg, $storeid, $volname, $timeout) = @_;
     my $cfg = sp_cfg($scfg, $storeid);
-    
+
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
-    
-    my $res = sp_vol_desc($cfg, $vol->{globalId});
-    my $vol_desc = $res->{data};
+
+    my $vol_desc;
+
+    if( $vol->{snapshot} ) {
+        $vol_desc = sp_snap_info_single($cfg, $vol->{globalId});
+    } else {
+        $vol_desc = sp_vol_desc($cfg, $vol->{globalId})->{data};
+    }
 
     # Right. So Proxmox seems to need these to be validated.
     my $size = $vol_desc->{'size'};
@@ -1286,7 +1291,6 @@ sub volume_size_info {
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
     return wantarray ? ($size, 'raw', $size, undef) : $size;
-
 }
 
 sub list_volumes_with_cache {
