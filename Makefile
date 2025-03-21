@@ -40,5 +40,6 @@ install: all
 
 clean:
 		# Nothing to do here
-
+test:
+	prove -l -Itlib/ t/
 .PHONY:		all install clean
