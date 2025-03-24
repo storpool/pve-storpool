@@ -1,0 +1,11 @@
+#!/usr/bin/env perl
+use v5.16;
+use strict;
+use warnings;
+use lib '../tlib';
+use PVE::Storpool 'storpool_confget_data';
+
+my $config = storpool_confget_data(); # Allows dynamic configuration generation and custom exit code
+
+print $config->{data};
+exit( $config->{exit_code} // 0 );

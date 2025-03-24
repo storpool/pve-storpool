@@ -1,0 +1,106 @@
+package PVE::Storpool;
+# Tests helper
+use v5.16;
+use strict;
+use warnings;
+use JSON; # decode_json encode_json
+use HTTP::Response;
+
+use Exporter 'import';
+
+our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request/;
+
+# Control the behavior of the storpool_confget cli
+sub config_location { '/tmp/storpool_confget_data' }
+
+# Used only in 1 test, for the other tests we will mock the config data
+sub write_config {
+    my $opts      = { @_ };
+    my $exit_code = $opts->{exit_code} || 0;
+    my $data      = $opts->{data};
+    my $path      = config_location();
+
+    my $json    = encode_json({ exit_code => $exit_code, data => $data });
+
+    open( my $fh, ">", $path ) or die "Failed to open for writing config file '$path': '$!'";
+
+    print $fh $json or die "Failed to write to $path";
+    close $fh or die "Failed to flush write to $path";
+}
+
+sub read_config {
+    my $path = config_location();
+
+    return {} if !-f $path; # we expect to be missing
+
+    open( my $fh, "<", $path ) or die "Failed to read $path: '$!'";
+    local $/;
+
+    my $data = <$fh>;
+
+    my $res = eval { decode_json( $data ) } // {};
+    close $fh;
+
+    return $res;
+}
+
+sub storpool_confget_data {
+    my $config = read_config();
+
+    return $config if scalar keys %$config;
+    return { data => 'test_var=test', exit_code => 1 }
+}
+
+sub mock_confget {
+    my %data = @_;
+    no warnings qw/redefine prototype/;
+   *PVE::Storage::Custom::StorPoolPlugin::sp_confget = sub {
+        %data
+    };
+}
+
+sub mock_sp_cfg {
+    no warnings qw/redefine prototype/;
+   *PVE::Storage::Custom::StorPoolPlugin::sp_cfg = sub {
+        {
+        storeid => 'StoreID',
+        scfg    => 'Scfg',
+        api     => {
+            url => 'http://local-machine:80/ctrl/1.0/',
+            ourid => 666,
+            auth_token => 'token'
+        },
+        proxmox => {
+            id => {
+               name => 'storpool'
+            }
+        }
+        };
+    };
+}
+
+sub mock_lwp_request {
+    no warnings 'redefine';
+    my $data    = shift;
+    my $test    = shift;
+    my $restore = shift;
+    state $orig = \&LWP::UserAgent::request;
+
+    if $data && ref($data) ne 'HTTP::Response' {
+        die "You must provide a object of type HTTP::Response for LWP mock to work";
+    }
+
+    if( $restore ) {
+        *LWP::UserAgent::request = $orig;
+    } else {
+        *LWP::UserAgent::request = sub {
+            my $class   = shift;
+            my $request = shift;
+
+            $test->($class) if $test && ref($test) eq 'CODE';
+            return $data;
+        }
+    }
+}
+
+'o_0';

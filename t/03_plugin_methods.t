@@ -3,7 +3,6 @@ use v5.16;
 use strict;
 use warnings;
 use Test::More;
-use Data::Dumper;
 #use Scalar::Util qw/reftype readonly/;
 
 use PVE::Storage::Custom::StorPoolPlugin;
