@@ -5,10 +5,12 @@ use strict;
 use warnings;
 use JSON; # decode_json encode_json
 use HTTP::Response;
+use Data::Dumper; # TODO remove
 
 use Exporter 'import';
 
-our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request/;
+our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request 
+truncate_http_log slurp_http_log make_http_request/;
 
 # Control the behavior of the storpool_confget cli
 sub config_location { '/tmp/storpool_confget_data' }
@@ -81,12 +83,16 @@ sub mock_sp_cfg {
 
 sub mock_lwp_request {
     no warnings 'redefine';
-    my $data    = shift;
-    my $test    = shift;
-    my $restore = shift;
+    my $params  = { @_ };
+    my $data    = $params->{data};
+    my $test    = $params->{test};
+    my $restore = $params->{restore};
     state $orig = \&LWP::UserAgent::request;
 
-    if $data && ref($data) ne 'HTTP::Response' {
+    if( $data && ref($data) eq 'HASH' ){
+        $data = HTTP::Response->new( $data->{code} // 200, $data->{msg}, $data->{header}, $data->{content} );
+    }
+    if( $data && ref($data) ne 'HTTP::Response' ) {
         die "You must provide a object of type HTTP::Response for LWP mock to work";
     }
 
@@ -97,10 +103,44 @@ sub mock_lwp_request {
             my $class   = shift;
             my $request = shift;
 
-            $test->($class) if $test && ref($test) eq 'CODE';
+            if( $test && ref($test) eq 'CODE' ) {
+                $data = $test->($class, $request);
+                $data = HTTP::Response->new( $data->{code} // 200, $data->{msg}, $data->{header}, $data->{content} );
+            }
             return $data;
         }
     }
 }
+
+sub truncate_http_log {
+    my $http_log_path = &PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG;
+    open(my $fh, '>', $http_log_path);
+    close $fh;
+}
+
+sub slurp_http_log { # --> Str
+    my $http_log_path = &PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG;
+    local $/;
+    open(my $fh, '<', $http_log_path) or return undef;
+    my $data = <$fh>;
+    close($fh);
+    return $data;
+}
+
+sub make_http_request {
+    my $params = { @_ };
+    my $method = $params->{method}  || 'GET';
+    my $path   = $params->{path}    || die "Missing path";
+    my $request= $params->{request};
+
+    mock_sp_cfg();
+    PVE::Storage::Custom::StorPoolPlugin::sp_request(
+        PVE::Storage::Custom::StorPoolPlugin::sp_cfg(1,2),
+        $method,
+        $path,
+        $request
+    );
+}
+
 
 'o_0';

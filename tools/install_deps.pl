@@ -25,6 +25,8 @@ my $DEPS = {
     'Config::IniFiles'  => { debian => 'libconfig-inifiles-perl',                ubuntu => 'libconfig-inifiles-perl' },
     'JSON'              => { debian => 'libjson-perl',                           ubuntu => 'libjson-perl' },
     'LWP::UserAgent'    => { debian => 'libwww-perl liblwp-protocol-https-perl', ubuntu => 'libwww-perl' },
+# Test depends
+    'unconstant'        => {}, # Disables constant inlining
 };
 
 
