@@ -142,5 +142,9 @@ sub make_http_request {
     );
 }
 
+package PVE::Cluster;
 
+    sub get_clinfo {
+        { cluster => { name => 'storpool' } }
+    }
 'o_0';
