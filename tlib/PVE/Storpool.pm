@@ -6,11 +6,12 @@ use warnings;
 use JSON; # decode_json encode_json
 use HTTP::Response;
 use Data::Dumper; # TODO remove
+use Carp;
 
 use Exporter 'import';
 
 our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request 
-truncate_http_log slurp_http_log make_http_request/;
+truncate_http_log slurp_http_log make_http_request taint/;
 
 # Control the behavior of the storpool_confget cli
 sub config_location { '/tmp/storpool_confget_data' }
@@ -141,6 +142,37 @@ sub make_http_request {
         $request
     );
 }
+
+# Taint
+sub taint {
+    state $TAINT_BIT = substr("$0$^X", 0, 0);
+    state $TAINT_NUM = 0 + "0$TAINT_BIT";
+
+    carp("Taint not enabled!") if !${^TAINT};
+
+    foreach my $var ( @_ ) { # Work with the argument references, so DO NOT change this
+        my $obj = tied $var; # blessed obj
+        if( defined $obj && $obj->can('TAINT') ){
+            $obj->TAINT(1);
+            next;
+        }
+        eval {
+            if( not $var & '00' | '00' ) {
+                $var += $TAINT_NUM;
+            } else {
+                $var .= $TAINT_BIT;
+            }
+        };
+        if ($@ && $@ =~ /read-only/) {
+            carp("Cannot taint read-only value");
+        } elsif ($@) {
+            carp("Taint failed: $@");
+        }
+    }
+    return
+}
+
+
 
 package PVE::Cluster;
 
