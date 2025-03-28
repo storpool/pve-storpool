@@ -40,6 +40,6 @@ install: all
 
 clean:
 		# Nothing to do here
-test:
-	prove -l -Itlib/ t/
+test: # We need taint mode on some tets, so exec the tests to use the shebang options
+	PERL5LIB=tlib/:lib/ prove --exec '' -j 4 -l t/
 .PHONY:		all install clean
