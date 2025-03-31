@@ -9,7 +9,9 @@ use PVE::Storage::Custom::StorPoolPlugin;
 use PVE::Storpool qw/storpool_confget_data write_config mock_confget/;
 
 # use storpool_confget cli in t/
-$ENV{PATH} = $ENV{PATH} . ':' . $Bin;
+my ($bin)  = ($Bin =~ /^(.*)$/); # untaint
+my ($path) = ($ENV{PATH} =~ /^(.*)$/); # untaint
+$ENV{PATH} = $path . ':' . $bin;
 
 sub get_config { # --> %Hash
     PVE::Storage::Custom::StorPoolPlugin::sp_confget()

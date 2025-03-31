@@ -7,11 +7,12 @@ use JSON; # decode_json encode_json
 use HTTP::Response;
 use Data::Dumper; # TODO remove
 use Carp;
+use Scalar::Util qw/tainted/;
 
 use Exporter 'import';
 
 our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request 
-truncate_http_log slurp_http_log make_http_request taint/;
+truncate_http_log slurp_http_log make_http_request taint not_tainted/;
 
 # Control the behavior of the storpool_confget cli
 sub config_location { '/tmp/storpool_confget_data' }
@@ -57,6 +58,7 @@ sub storpool_confget_data {
 sub mock_confget {
     my %data = @_;
     no warnings qw/redefine prototype/;
+    taint(%data) if ${^TAINT};
    *PVE::Storage::Custom::StorPoolPlugin::sp_confget = sub {
         %data
     };
@@ -106,6 +108,7 @@ sub mock_lwp_request {
 
             if( $test && ref($test) eq 'CODE' ) {
                 $data = $test->($class, $request);
+                taint($data->{content}) if ${^TAINT};
                 $data = HTTP::Response->new( $data->{code} // 200, $data->{msg}, $data->{header}, $data->{content} );
             }
             return $data;
@@ -143,6 +146,7 @@ sub make_http_request {
     );
 }
 
+
 # Taint
 sub taint {
     state $TAINT_BIT = substr("$0$^X", 0, 0);
@@ -172,6 +176,10 @@ sub taint {
     return
 }
 
+# Returns values if not tainted
+sub not_tainted {
+    grep { !tainted($_) } @_
+}
 
 
 package PVE::Cluster;

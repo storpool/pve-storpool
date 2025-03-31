@@ -10,7 +10,9 @@ use JSON;
 
 use PVE::Storage::Custom::StorPoolPlugin;
 use PVE::Storpool qw/mock_sp_cfg mock_lwp_request truncate_http_log slurp_http_log make_http_request/;
-use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log.txt';
+
+# Use different log for every test in order to parallelize them
+use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log-06.txt';
 
 my $plugin = \%{PVE::Storage::Custom::StorPoolPlugin::};
 
