@@ -2,12 +2,10 @@
 use v5.16;
 use strict;
 use warnings;
-use Test::More tests => 4;
+use Test::More tests => 5;
 
 use PVE::Storage::Custom::StorPoolPlugin;
 use PVE::Storpool qw/mock_confget/;
-
-# log_info calls syslog
 
 ( $ENV{PATH} ) = ( $ENV{PATH} =~ /^(.*)$/ );
 
@@ -42,5 +40,6 @@ undef $@;
 eval {
     PVE::Storage::Custom::StorPoolPlugin::list_images(undef,undef,undef,'vmID',1)
 };
-like($@, qr/not implemented yet/, 'deactivate_storage');
+like($@, qr/not implemented yet/, 'list_images with volume list');
+like($@, qr/vmID/, 'list_images vmID with volume list');
 
