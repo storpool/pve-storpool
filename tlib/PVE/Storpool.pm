@@ -108,6 +108,7 @@ sub mock_lwp_request {
 
             if( $test && ref($test) eq 'CODE' ) {
                 $data = $test->($class, $request);
+                die "Missing response Hash" if !$data;
                 taint($data->{content}) if ${^TAINT};
                 $data = HTTP::Response->new( $data->{code} // 200, $data->{msg}, $data->{header}, $data->{content} );
             }
