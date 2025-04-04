@@ -12,7 +12,7 @@ use Scalar::Util qw/tainted/;
 use Exporter 'import';
 
 our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request 
-truncate_http_log slurp_http_log make_http_request taint not_tainted/;
+truncate_http_log slurp_http_log make_http_request taint not_tainted bless_plugin/;
 
 # Control the behavior of the storpool_confget cli
 sub config_location { '/tmp/storpool_confget_data' }
@@ -180,6 +180,15 @@ sub taint {
 # Returns values if not tainted
 sub not_tainted {
     grep { !tainted($_) } @_
+}
+
+sub bless_plugin {
+    *PVE::Storage::Custom::StorPoolPlugin::new = sub {
+        my $class = shift;
+        my $data  = { test => 1 };
+
+        return bless $data, $class;
+    }
 }
 
 
