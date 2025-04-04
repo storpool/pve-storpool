@@ -5,6 +5,7 @@ use warnings;
 use Test::More;
 use unconstant; # disable constant inlining
 use JSON;
+use Scalar::Util qw/tainted/;
 
 use PVE::Storage::Custom::StorPoolPlugin;
 use PVE::Storpool qw/mock_confget truncate_http_log slurp_http_log mock_lwp_request/;
@@ -185,6 +186,13 @@ like(
     qr{^ VolumesAndSnapshotsList--VolumeCreate--Volume/~5--VolumesReassignWait $}x,
     "$STAGE: correct API calls used"
 ) or diag explain \@endpoints;
+# TODO untaint
+
+TODO: {
+    note "Fix the tainted data";
+    local $TODO = "$STAGE tainted data";
+    is(tainted($result), 0, "$STAGE: Data not tainted") or diag "Tainted";
+}
 
 
 ### Missing API responses
