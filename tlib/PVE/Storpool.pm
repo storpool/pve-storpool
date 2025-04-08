@@ -8,11 +8,13 @@ use HTTP::Response;
 use Data::Dumper; # TODO remove
 use Carp;
 use Scalar::Util qw/tainted/;
-
+use Unix::Mknod qw/:all/;
+use File::stat;
+use Fcntl qw(:mode);
 use Exporter 'import';
 
 our @EXPORT = qw/storpool_confget_data config_location write_config mock_confget mock_sp_cfg mock_lwp_request 
-truncate_http_log slurp_http_log make_http_request taint not_tainted bless_plugin/;
+truncate_http_log slurp_http_log make_http_request taint not_tainted bless_plugin create_block_file/;
 
 # Control the behavior of the storpool_confget cli
 sub config_location { '/tmp/storpool_confget_data' }
@@ -191,6 +193,23 @@ sub bless_plugin {
     }
 }
 
+# returns
+# 0 success
+# -1 error: see $!
+# 1 already exists
+sub create_block_file {
+    my $file    = shift // die "Missing file to create block device";
+    my $st      = stat('/dev/null');
+    my $major   = major($st->rdev);
+    my $minor   = minor($st->rdev);
+
+    if( -e $file ) {
+        die "File exists but is not a block file" if !-b $file;
+        return 1;
+    }
+
+    mknod($file, S_IFBLK|0600, makedev($major,$minor+1));
+}
 
 package PVE::Cluster;
 
