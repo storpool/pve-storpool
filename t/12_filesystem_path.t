@@ -3,7 +3,6 @@ use v5.16;
 use strict;
 use warnings;
 use Test::More;
-use Data::Dumper;
 use Scalar::Util qw/tainted/;
 use JSON;
 use unconstant; # disable constant inlining
@@ -11,7 +10,7 @@ use unconstant; # disable constant inlining
 use PVE::Storpool qw/mock_confget taint not_tainted mock_sp_cfg mock_lwp_request truncate_http_log slurp_http_log bless_plugin/;
 use PVE::Storage::Custom::StorPoolPlugin;
 # Use different log for every test in order to parallelize them
-use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log-08.txt';
+use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log-12.txt';
 
 
 #= $plugin->filesystem_path(\%scfg, $volname [, $snapname])
