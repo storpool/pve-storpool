@@ -50,10 +50,6 @@ mock_lwp_request(
 
         push @endpoints, $endpoint;
 
-        say "="x150;
-        say $http_uri;
-        say $http_request;
-
         if( $uri =~ /VolumesReassignWait$/ ) {
             my $decoded = decode_json($content);
             is($method,'POST', "$STAGE: VolumesReassignWait POST");
