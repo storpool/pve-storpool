@@ -110,8 +110,10 @@ create_block_file($return_path);
 $result = $class->deactivate_volume('storeid',{}, $volname);
 unlink $return_path;
 
-is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: deatched");
-is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
-
+SKIP: {
+    skip "You must be root to test with creating block file", 2 if $> != 0;
+    is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: deatched");
+    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+}
 
 done_testing();

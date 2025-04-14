@@ -208,7 +208,9 @@ sub create_block_file {
         return 1;
     }
 
-    mknod($file, S_IFBLK|0600, makedev($major,$minor+1));
+    my $result = mknod($file, S_IFBLK|0600, makedev($major,$minor+1));
+    warn "Failed to create block file '$file'. Error: " . $! if $result == -1;
+    return $result
 }
 
 package PVE::Cluster;
