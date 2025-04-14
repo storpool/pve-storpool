@@ -40,5 +40,8 @@ install: all
 
 clean:
 		# Nothing to do here
-
+test:
+	PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l t/
+test-v:
+	PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l -w -o -v t/
 .PHONY:		all install clean
