@@ -83,7 +83,7 @@ $response->{content} = "";
 $result = eval { $class->check_connection('storeid',{}) };
 my $error = $@;
 is(!!$result,'', "missing response from API");
-like($error, qr/malformed JSON string/, "missing response died");
+like($error, qr/Could not fetch the StorPool services list/, "missing response died");
 
 TODO: {
     local $TODO = "Missing response must die with more appropriate error";

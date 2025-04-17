@@ -7,7 +7,7 @@ use strict;
 use warnings;
 use version; our $VERSION = version->declare("v0.5.1");
 
-use Carp qw/carp croak/;
+use Carp qw/carp croak confess/;
 use Config::IniFiles;
 use Data::Dumper;
 use File::Path;
@@ -39,7 +39,10 @@ BEGIN {
 
 # The volume tags that we look for and set
 use constant {
-    HTTP_TIMEOUT     => 2 * 60 * 60, # In seconds
+    HTTP_TIMEOUT     => 30 * 60, # In seconds - 30 min
+    HTTP_TOTAL_TIMEOUT=> 30 * 60,# Timeout including retries
+    HTTP_RETRY_COUNT => 3, # How much retries after timeout/cant connect
+    HTTP_RETRY_TIME  => 3, # How much to wait before retry in seconds
     VTAG_VIRT	     => 'virt',
     VTAG_LOC	     => 'pve-loc',
     VTAG_STORE	     => 'pve',
@@ -164,20 +167,71 @@ sub log_info {
     syslog 'info', 'StorPool plugin: %s', $msg;
 }
 
-# Wrapper functions for the actual request
-sub sp_get($$) {
-    my $cfg  = shift;
-    my $addr = shift;
-
-    return sp_request($cfg, 'GET', $addr, undef);
+sub debug_die {
+    my $msg = shift // '';
+    syslog 'err', 'StorPool plugin: %s', $msg;
+    confess "$msg\n";
 }
 
-sub sp_post($$$) {
-    my $cfg    = shift;
-    my $addr   = shift;
-    my $params = shift;
+sub sp_request_timeouted {
+    my $response = shift // return undef;
 
-    return sp_request($cfg, 'POST', $addr, $params);
+    return $response && ref($response) eq 'HASH' && $response->{error}
+	&& $response->{error}->{reason}
+	&& $response->{error}->{reason} eq 'timeouted'
+}
+
+# Retry a request, see HTTP_RETRY_COUNT HTTP_RETRY_TIME HTTP_TOTAL_TIMEOUT
+# It makes HTTP_RETRY_COUNT retries after a request fails to connect or timeouts
+# HTTP_RETRY_TIME is the wait time before each retry
+# HTTP_TOTAL_TIMEOUT is a timeout including the retries, the idea is to have a
+# reasonable timeout if the main HTTP_TIMEOUT is too long as it can multiply it!
+sub sp_request_retry {
+    my $code	 = shift // debug_die("Missing code to exec");
+    my $retry	 = HTTP_RETRY_COUNT;
+    my $timeout  = HTTP_TIMEOUT;
+    my $ret_time = HTTP_RETRY_TIME;
+    my $start	 = time();
+    my $data	 = $code->(); # First request
+    my $duration = time() - $start;
+
+    debug_die("Missing code to exec")	    if ref($code) ne 'CODE';
+    debug_die("Timeouted after $duration")  if $duration >= HTTP_TOTAL_TIMEOUT;
+    return $data			    if !sp_request_timeouted($data);
+
+    while (sp_request_timeouted($data) && $retry > 0) {
+	sleep($ret_time);
+	my $st1	  = time();
+	$data	  = $code->(); # request runs here
+	$duration = time() - $st1;
+	my $total_duration = time() - $start;
+	debug_die("Timeouted after $duration") if $duration >= $timeout;
+	debug_die("Timeouted after $total_duration")
+	    if $total_duration >= HTTP_TOTAL_TIMEOUT;
+	$retry--;
+    }
+    debug_die('Timeout connection after '.HTTP_RETRY_COUNT.' tries')
+	if sp_request_timeouted($data);
+
+    return $data;
+}
+
+# Wrapper functions for the actual request
+sub sp_get {
+    my $cfg   = shift;
+    my $addr  = shift // debug_die("Missing GET address");
+    return sp_request_retry( sub {
+	sp_request($cfg, 'GET', $addr, undef);
+    });
+}
+
+sub sp_post {
+    my $cfg    = shift;
+    my $addr   = shift // debug_die("Missing POST address");
+    my $params = shift;
+    return sp_request_retry( sub {
+	sp_request($cfg, 'POST', $addr, $params);
+    });
 }
 
 sub sp_request_log_response {
@@ -203,8 +257,11 @@ sub sp_request_log_response {
 }
 
 # HTTP request to the storpool api
-sub sp_request($$$$){
-    my ($cfg, $method, $addr, $params) = @_;
+sub sp_request {
+    my $cfg     = shift;
+    my $method  = shift // 'GET';
+    my $addr    = shift // debug_die('Missing address for API');
+    my $params  = shift;
 
     return if ${^GLOBAL_PHASE} eq 'START';
 
@@ -214,8 +271,7 @@ sub sp_request($$$$){
     my $p = HTTP::Request->new($method, $cfg->{api}->{url}.$addr, $h);
     $p->content( encode_json( $params ) ) if defined $params;
 
-    my $ua = LWP::UserAgent->new();
-    $ua->timeout( HTTP_TIMEOUT );
+    my $ua = LWP::UserAgent->new( timeout => HTTP_TIMEOUT );
 
     my $start	 = time();
     my $response = $ua->request($p);
@@ -224,13 +280,23 @@ sub sp_request($$$$){
     sp_request_log_response($method, $addr, $response, $duration);
 
     if ($response->code eq "200"){
-	return decode_json($response->content);
+	my $data = eval { decode_json($response->content) };
+	log_info("Missing content for API '$addr'") if !defined $data;
+	return $data;
     } else {
 	# this might break something
-	my $res = decode_json($response->content);
+	my $res	    = eval { decode_json($response->content) };
+	my $reason  = $response->header('client-warning') || '';
 
-	return $res if $res and $res->{error};
-	return { error => { descr => 'Error code: '.$response->code} };
+	$reason = 'timeouted' if $reason && $reason eq 'Internal response';
+
+	return $res if $res && ref($res) eq 'HASH' && $res->{error};
+	return {
+	    error => {
+		descr => 'Error code: '.$response->code, code => $response->code,
+		reason => $reason
+	    }
+	};
     }
 }
 
@@ -882,7 +948,7 @@ sub sp_decode_volsnap_to_tags($$) {
 	my ($global_id, $vm_id) = ($+{global_id}, $+{vm_id});
 	if (!defined $global_id) {
 	    my $vol = sp_find_cloudinit_vol($cfg, $vm_id);
-	    $global_id = $vol->{globalId};
+	    $global_id = $vol->{globalId} || '';
 	}
 	return {
 	    name     => "~$global_id",
@@ -1285,7 +1351,10 @@ sub filesystem_path {
     my $volname  = shift;
     my $snapname = shift;
 
+    # tags->VTAG_TYPE, globalId, tags->VTAG_VM
     my ($vtype, $name, $vmid) = $self->parse_volname("$volname");
+
+    log_and_die("Missing type '$vtype' volume '$volname'") if !$name;
 
     my $path = "/dev/storpool-byid/$name";
     if ($path =~ RE_FS_PATH) {
