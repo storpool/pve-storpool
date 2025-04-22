@@ -54,7 +54,7 @@ $result = eval { PVE::Storage::Custom::StorPoolPlugin::sp_get($cfg,'/test') };
 
 is($result, undef, 'Timeout GET result OK');
 is($count, $retries, 'Timeout GET retries OK');
-like($@, qr/Timeout connection/, 'Timeout GET dies');
+like($@, qr/Timeout connecting/, 'Timeout GET dies');
 
 # Retry POST
 $count = 0;
@@ -62,7 +62,7 @@ $result = eval { PVE::Storage::Custom::StorPoolPlugin::sp_post($cfg,'/test',{}) 
 
 is($result, undef, 'Timeout POST result OK');
 is($count, $retries, 'Timeout POST retries OK');
-like($@, qr/Timeout connection/, 'Timeout POST dies');
+like($@, qr/Timeout connecting/, 'Timeout POST dies');
 
 ## Log HTTP response
 
@@ -114,7 +114,9 @@ like( $@, qr/Missing path/, 'Missing path' );
 # Missing JSON params
 $response = eval { make_http_request( path => 'here-path' ) };
 
-is($response, undef, 'Missing params');
+is(ref($response), 'HASH', 'Missing params');
+like($response->{error}->{descr}, qr/Missing content/, 'Missing params error');
+
 #like( $@, qr/malformed JSON string/, 'Missing params' );
 
 # Error 404 with error

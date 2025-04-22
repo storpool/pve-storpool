@@ -7,7 +7,7 @@ use strict;
 use warnings;
 use version; our $VERSION = version->declare("v0.5.1");
 
-use Carp qw/carp croak confess/;
+use Carp qw/carp croak confess longmess/;
 use Config::IniFiles;
 use Data::Dumper;
 use File::Path;
@@ -167,6 +167,11 @@ sub log_info {
     syslog 'info', 'StorPool plugin: %s', $msg;
 }
 
+sub debug_info {
+    my $msg = shift // '';
+    syslog 'info', 'StorPool plugin: %s', longmess($msg);
+}
+
 sub debug_die {
     my $msg = shift // '';
     syslog 'err', 'StorPool plugin: %s', $msg;
@@ -210,7 +215,7 @@ sub sp_request_retry {
 	    if $total_duration >= HTTP_TOTAL_TIMEOUT;
 	$retry--;
     }
-    debug_die('Timeout connection after '.HTTP_RETRY_COUNT.' tries')
+    debug_die('Timeout connecting after '.HTTP_RETRY_COUNT.' tries')
 	if sp_request_timeouted($data);
 
     return $data;
@@ -280,17 +285,35 @@ sub sp_request {
     sp_request_log_response($method, $addr, $response, $duration);
 
     if ($response->code eq "200"){
+	undef $@;
 	my $data = eval { decode_json($response->content) };
-	log_info("Missing content for API '$addr'") if !defined $data;
+	if (!defined $data){
+	    my $type  = $response->content ? 'Failed to decode' : 'Missing content';
+	    my $error = "$type response: " . ($@||'Unknown error');
+	    debug_info("$type API '$addr': $error");
+	    $data = { error => { descr => $error } };
+	}
 	return $data;
     } else {
+	undef $@;
 	# this might break something
 	my $res	    = eval { decode_json($response->content) };
 	my $reason  = $response->header('client-warning') || '';
 
 	$reason = 'timeouted' if $reason && $reason eq 'Internal response';
 
-	return $res if $res && ref($res) eq 'HASH' && $res->{error};
+	if (!defined $res && $@) {
+	    debug_info("Failed to decode response for $method $addr : $@");
+	}
+	if( $res && ref($res) eq 'HASH' && $res->{error} ){
+	    my $err = ref $res->{error} eq 'HASH'
+		? $res->{error}->{descr}
+		: !ref($res->{error}) ? $res->{error} : 'Unknown error' ;
+	    debug_info("$method $addr ".$response->code." error: $err");
+	    return $res;
+	} elsif (defined $res) {
+	    debug_info("$method $addr ".$response->code." Unknown error");
+	}
 	return {
 	    error => {
 		descr => 'Error code: '.$response->code, code => $response->code,
