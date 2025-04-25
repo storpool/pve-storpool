@@ -57,5 +57,30 @@ like($path, qr{/dev/storpool-byid/$version}, 'filesystem_path correct path retur
 my @path = PVE::Storage::Custom::StorPoolPlugin::filesystem_path($class, undef, "snap-55-disk-0-proxmox-p-1.2.3-sp-$version.raw", undef );
 is_deeply(\@path, [ qq{/dev/storpool-byid/$version}, qw/55 images/], 'wantarray');
 
+# Missing cloudinit volume - it searches for it if no global ID is provided
+undef $@;
+truncate_http_log();
+mock_lwp_request( data => { content => '{}', code => 200 } );
+$path = eval { PVE::Storage::Custom::StorPoolPlugin::filesystem_path($class, undef, "vm-11-cloudinit.raw", undef ) };
+
+is($path, undef, 'cloudinit missing image result');
+like($@, qr/Missing.*volume/, 'cloudinit missing image died');
+
+# cloudinit with global ID
+undef $@;
+$path = PVE::Storage::Custom::StorPoolPlugin::filesystem_path($class, undef, "vm-11-cloudinit-sp-$version.raw", undef );
+is($path, "/dev/storpool-byid/$version", 'cloudinit image with global ID');
+
+# cloudinit found image
+undef $@;
+my $data = { generation => 12, data =>[{
+        bw=>123,globalId=>$version, creationTimestamp => time(),
+        tags => {'pve-loc'=>'storpool', 'pve-vm'=>11, 'pve-type'=>'images', 'pve-disk'=>'cloudinit', virt=>'pve'}
+    }]
+};
+
+mock_lwp_request( data => { content => encode_json($data), code => 200 } );
+$path = PVE::Storage::Custom::StorPoolPlugin::filesystem_path($class, undef, "vm-11-cloudinit.raw", undef );
+is($path, "/dev/storpool-byid/$version", 'cloudinit image with global ID');
 
 done_testing();

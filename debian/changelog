@@ -1,0 +1,110 @@
+pve-storpool (0.5.1-1) bookworm-backports; urgency=medium
+
+  * New upstream release
+  * Moved watchdog to pve-storpool-watchdog package
+
+ -- StorPool <support@storpool.com>  Tue, 18 Mar 2025 09:47:49 +0000
+
+pve-storpool (0.4.1-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- StorPool <support@storpool.com>  Fri, 15 Nov 2024 12:39:04 +0000
+
+pve-storpool (0.4.1-1) unstable; urgency=medium
+
+  * New upstream release 
+
+ -- StorPool <support@storpool.com>  Fri, 15 Nov 2024 12:33:41 +0000
+
+pve-storpool (0.4.0-1) unstable; urgency=medium
+
+  * New upstream release 
+
+ -- StorPool <support@storpool.com>  Thu, 14 Nov 2024 11:59:55 +0000
+
+pve-storpool (0.3.3-1) unstable; urgency=medium
+
+  * New upstream release
+  * Remove documentation dependencies and rules
+    - it has been moved to https://kb.storpool.com
+
+ -- StorPool <support@storpool.com>  Wed, 07 Aug 2024 13:30:46 +0000
+
+pve-storpool (0.3.2-1) unstable; urgency=medium
+
+  * New upstream release 
+  * Make sure sp-watchdog-mux.service is masked by default
+
+ -- StorPool <support@storpool.com>  Tue, 09 Jul 2024 08:17:06 +0000
+
+pve-storpool (0.3.1-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- StorPool <support@storpool.com>  Wed, 19 Jun 2024 10:51:51 +0000
+
+pve-storpool (0.3.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Depend on systemd (for sp-watchdog-mux)
+  * Ignore lintian rule "dir-or-file-in-opt"
+  * Create systemd service file path
+
+ -- StorPool <support@storpool.com>  Mon, 17 Jun 2024 15:18:05 +0000
+
+pve-storpool (0.2.4-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- Peter Pentchev <pp@storpool.com>  Mon, 01 Apr 2024 11:49:00 +0300
+
+pve-storpool (0.2.4-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Honor ${mkdocs:Depends} for the binary package dependencies.
+  * In the post-install script, only restart services if "configure" is specified.
+
+ -- Peter Pentchev <pp@storpool.com>  Fri, 29 Mar 2024 17:20:19 +0200
+
+pve-storpool (0.2.3-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- Peter Pentchev <pp@storpool.com>  Tue, 12 Dec 2023 08:25:25 +0200
+
+pve-storpool (0.2.3-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Fix the docs build by adding a build dependency on python3-pymdownx.
+  * Depend on the sp-pve-fixes package to work around the pvedaemon HTTP
+    keep-alive problem for the present.
+
+ -- Peter Pentchev <pp@storpool.com>  Tue, 12 Dec 2023 08:18:12 +0200
+
+pve-storpool (0.2.2-1~bpo12+1) bookworm-backports; urgency=medium
+
+  * Rebuild for bookworm-backports.
+
+ -- Peter Pentchev <pp@storpool.com>  Mon, 11 Sep 2023 16:27:44 +0300
+
+pve-storpool (0.2.2-1) unstable; urgency=medium
+
+  * Correct the BSD-2-clause license name in the copyright file.
+  * New upstream release:
+    - create the file where the StorPool API queries will be logged
+      unless it already exists
+
+ -- Peter Pentchev <pp@storpool.com>  Fri, 08 Sep 2023 10:47:18 +0300
+
+pve-storpool (0.2.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Peter Pentchev <pp@storpool.com>  Wed, 12 Jul 2023 17:05:44 +0300
+
+pve-storpool (0.2.0-1) unstable; urgency=medium
+
+  * Initial upload.
+
+ -- Peter Pentchev <pp@storpool.com>  Sun, 04 Jun 2023 13:30:05 +0300

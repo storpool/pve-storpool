@@ -31,6 +31,7 @@ all:
 install: all
 		{ \
 			set -e; \
+			${INSTALL_DATA} -- resources/storpool_proxmox_logrotate ${DESTDIR}/etc/logrotate.d/storpool_proxmox; \
 			for relpath in ${PVE_MODULES}; do \
 				${MKDIR_P} -- "${DESTDIR}$$(dirname -- "${PVE_PERL}/$$relpath")"; \
 				${INSTALL_DATA} -- "lib/$$relpath" "${DESTDIR}${PVE_PERL}/$$relpath"; \

@@ -27,7 +27,7 @@ my $DEPS = {
     'LWP::UserAgent'    => { debian => 'libwww-perl liblwp-protocol-https-perl', ubuntu => 'libwww-perl' },
 # Test depends
     'Unix::Mknod'       => { debian => 'libunix-mknod-perl',                     ubuntu => 'libunix-mknod-perl' },
-    'unconstant'        => {}, # Disables constant inlining
+#    'unconstant'        => {}, # Disables constant inlining, included in tlib/
 
 };
 

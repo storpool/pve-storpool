@@ -1,0 +1,9 @@
+/var/log/storpool/pve-storpool-query.log {
+    missingok
+    notifempty
+    compress
+    copytruncate
+    daily
+    maxsize 100M
+    rotate 10
+}
