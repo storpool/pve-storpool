@@ -7,6 +7,10 @@ Build-Depends:
  debhelper-compat (= 13),
  dh-sequence-single-binary,
  systemd,
+ libconfig-inifiles-perl,
+ libjson-perl,
+ libwww-perl,
+ libunix-mknod-perl
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
 Vcs-Git: https://github.com/storpool/pve-storpool.git -b main
