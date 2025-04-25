@@ -9,8 +9,8 @@ Build-Depends:
  systemd,
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
-Vcs-Git: https://github.com/storpool/pve-storpool.git -b debian/unstable
-Vcs-Browser: https://github.com/storpool/pve-storpool/tree/debian/unstable
+Vcs-Git: https://github.com/storpool/pve-storpool.git -b main
+Vcs-Browser: https://github.com/storpool/pve-storpool/tree/main
 Rules-Requires-Root: no
 
 Package: pve-storpool
