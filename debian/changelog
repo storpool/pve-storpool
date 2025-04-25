@@ -1,3 +1,10 @@
+pve-storpool (0.5.1-1) bookworm-backports; urgency=medium
+
+  * New upstream release
+  * Moved watchdog to pve-storpool-watchdog package
+
+ -- StorPool <support@storpool.com>  Tue, 18 Mar 2025 09:47:49 +0000
+
 pve-storpool (0.4.1-1~bpo12+1) bookworm-backports; urgency=medium
 
   * Rebuild for bookworm-backports.
