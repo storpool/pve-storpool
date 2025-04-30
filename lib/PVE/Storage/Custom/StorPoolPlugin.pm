@@ -1389,28 +1389,38 @@ sub filesystem_path {
     return wantarray ? ($path, $vmid, $vtype) : $path;
 }
 
+
+# Returns the vmID's lock/hastate status
+# return { lock => '', hastate => '' }
+# PVE::API2::Cluster +404
 sub get_vm_status {
-    my $vmid = shift;
+        my $vmid  	= shift // debug_die("Missing vmid");
 
-    my $all_vms = do {
-	open(my $f, '-|', 'pvesh', 'get', 'cluster/resources', '-type', 'vm', '--output-format', 'json')
-	    or log_and_die("pvesh failed: $!");
-	my $pvesh_output = do {
-	    local $/;
-	    <$f>
-	};
-	my $status = decode_json($pvesh_output);
-	close($f)
-	    or log_and_die($! == 0 ? "pvesh exited with code $?" : "reading pvesh output failed: $!");
-	$status;
-    };
-    my $vm_status = first { $_->{vmid} == $vmid } @{$all_vms}
-	or log_and_die("Could not find VM $vmid in cluster resources");
+	my $tags 	= ['lock'];
+	my $props 	= PVE::Cluster::get_guest_config_properties($tags) || {};
+	my $hastatus 	= PVE::HA::Config::read_manager_status()   || {service_status=>{}};
+	my $haresources = PVE::HA::Config::read_resources_config() || {ids=>{}};
+	my $vm_props  	= $props->{ $vmid } || {};
+	my $hatypemap 	= { qw/qemu vm lxc ct/ };
+	my $hastate   	= '';
+	my $sid1 	= $hatypemap->{qemu} . ':' . $vmid;
+	my $sid2 	= $hatypemap->{lxc}  . ':' . $vmid;
 
-    log_info("VM $vmid parsed status:\n".Dumper($vm_status));
+	my $hastate_sid = $hastatus->{service_status}->{$sid1}
+		|| $hastatus->{service_status}->{$sid2}
+		|| $haresources->{ids}->{$sid1}
+		|| $haresources->{ids}->{$sid2}
+		|| {};
 
-    return $vm_status;
+	my $lock = $vm_props->{lock} 	 || '';
+	$hastate = $hastate_sid->{state} || '';
+
+	my $status = { lock => $lock, hastate => $hastate };
+	log_info("VM $vmid parsed status: { lock => $lock, hastate => $hastate }");
+
+	return $status;
 }
+
 
 sub activate_volume {
     my $self	    = shift;
