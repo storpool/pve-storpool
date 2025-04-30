@@ -1394,31 +1394,31 @@ sub filesystem_path {
 # return { lock => '', hastate => '' }
 # PVE::API2::Cluster +404
 sub get_vm_status {
-        my $vmid  	= shift // debug_die("Missing vmid");
+    my $vmid	    = shift // debug_die("Missing vmid");
 
-	my $tags 	= ['lock'];
-	my $props 	= PVE::Cluster::get_guest_config_properties($tags) || {};
-	my $hastatus 	= PVE::HA::Config::read_manager_status()   || {service_status=>{}};
-	my $haresources = PVE::HA::Config::read_resources_config() || {ids=>{}};
-	my $vm_props  	= $props->{ $vmid } || {};
-	my $hatypemap 	= { qw/qemu vm lxc ct/ };
-	my $hastate   	= '';
-	my $sid1 	= $hatypemap->{qemu} . ':' . $vmid;
-	my $sid2 	= $hatypemap->{lxc}  . ':' . $vmid;
+    my $tags	    = ['lock'];
+    my $props	    = PVE::Cluster::get_guest_config_properties($tags) || {};
+    my $hastatus    = PVE::HA::Config::read_manager_status()   || {service_status=>{}};
+    my $haresources = PVE::HA::Config::read_resources_config() || {ids=>{}};
+    my $vm_props    = $props->{ $vmid } || {};
+    my $hatypemap   = { qw/qemu vm lxc ct/ };
+    my $hastate	    = '';
+    my $sid1	    = $hatypemap->{qemu} . ':' . $vmid;
+    my $sid2	    = $hatypemap->{lxc}  . ':' . $vmid;
 
-	my $hastate_sid = $hastatus->{service_status}->{$sid1}
-		|| $hastatus->{service_status}->{$sid2}
-		|| $haresources->{ids}->{$sid1}
-		|| $haresources->{ids}->{$sid2}
-		|| {};
+    my $hastate_sid = $hastatus->{service_status}->{$sid1}
+	|| $hastatus->{service_status}->{$sid2}
+	|| $haresources->{ids}->{$sid1}
+	|| $haresources->{ids}->{$sid2}
+	|| {};
 
-	my $lock = $vm_props->{lock} 	 || '';
-	$hastate = $hastate_sid->{state} || '';
+    my $lock = $vm_props->{lock}     || '';
+    $hastate = $hastate_sid->{state} || '';
 
-	my $status = { lock => $lock, hastate => $hastate };
-	log_info("VM $vmid parsed status: { lock => $lock, hastate => $hastate }");
+    my $status = { lock => $lock, hastate => $hastate };
+    log_info("VM $vmid parsed status: { lock => $lock, hastate => $hastate }");
 
-	return $status;
+    return $status;
 }
 
 
