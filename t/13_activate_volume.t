@@ -150,5 +150,18 @@ isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID");
 is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 
+# Lock migrate
+undef $@;
+@endpoints = ();
+$STAGE = 6;
+$volname = "vm-11-disk-0-sp-4.1.3.raw";
+$vm_status_response = { lock => 'migrate', hastate => '' };
+$expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3"}];
+$result = $class->activate_volume('storeid',{}, $volname);
+
+isnt($result, undef, "$STAGE: volume");
+is($vm_status_response_vmid, 11, "$STAGE: volume ID");
+is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+
 
 done_testing();
