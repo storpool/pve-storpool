@@ -42,7 +42,7 @@ install: all
 clean:
 		# Nothing to do here
 test:
-	PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l t/
+	PLUGIN_TEST=1 PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l t/
 test-v:
-	PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l -w -o -v t/
+	PLUGIN_TEST=1 PERL5LIB=tlib/:lib/ prove -Itlib/ -T -l -w -o -v t/
 .PHONY:		all install clean

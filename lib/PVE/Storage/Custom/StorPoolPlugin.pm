@@ -7,7 +7,7 @@ use strict;
 use warnings;
 use version; our $VERSION = version->declare("v0.5.2");
 
-use Carp qw/carp croak confess longmess/;
+use Carp qw/carp croak confess shortmess longmess/;
 use Config::IniFiles;
 use Data::Dumper;
 use File::Path;
@@ -158,25 +158,92 @@ my $SP_VERS = '1.0';
 sub log_and_die {
     my $msg = shift // "Missing message!";
 
+    DEBUG( $msg );
     syslog 'err', 'StorPool plugin: %s', $msg;
     croak "$msg\n";
 }
 
 sub log_info {
     my $msg = shift // '';
+
+    DEBUG( $msg );
     syslog 'info', 'StorPool plugin: %s', $msg;
 }
 
 sub debug_info {
     my $msg = shift // '';
+
+    DEBUG( $msg );
     syslog 'info', 'StorPool plugin: %s', longmess($msg);
 }
 
 sub debug_die {
     my $msg = shift // '';
-    syslog 'err', 'StorPool plugin: %s', $msg;
+
+    DEBUG( $msg );
+    syslog 'err', 'StorPool plugin: %s', longmess($msg);
     confess "$msg\n";
 }
+
+# Debug [trace] to file
+# Usage DEBUG("Message, data %s, %s", {data=>123}, [1])
+# create proxmox.conf file in /etc/storpool.conf.d/
+# define _SP_PVE_DEBUG=[012] 0 disable 1 log 2 trace
+# define _SP_PVE_DEBUG_PATH=IO::Path path to the file - pref /var/log/storpool/
+# NOTE file is not locked, so concurrent writes may lead to messy messages
+# NOTE configuration is cached, so you must restart the services on change
+# NOTE function is disabled during the unit tests
+sub DEBUG {
+    return if $ENV{PLUGIN_TEST}; # during the tests sp_confget is unavailable
+    my $msg	  = shift // 'Empty message';
+    my $data	  = [ @_ ];
+    state $config = sp_confget() || {};
+    state $timing = time(); # Time of last call
+    my $time	  = time(); # Time now, must be hi-res
+    my $duration  = sprintf("%.4f", $time - $timing);
+
+    $timing = $time;
+
+    return if !$config || ref($config) ne 'HASH';
+
+    my $lvl	  = $config->{_SP_PVE_DEBUG};
+    my $path	  = $config->{_SP_PVE_DEBUG_PATH};
+
+    return if !$lvl;
+    debug_die("Missing debug path, set _SP_PVE_DEBUG_PATH and restart") if !$path;
+    debug_die("Message must be a string") if ref($msg);
+
+    if( scalar(@$data) ) {
+        $msg = sprintf($msg, 
+	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
+    }
+
+    if( $lvl eq '1' ){
+	$msg = shortmess($msg);
+    } else {
+	$msg = longmess($msg);
+    }
+
+    $msg = _localtime_human() . " took $duration: " . $msg . "\n";
+
+    open( my $fh, '>>', $path ) 
+	or confess("Failed to open debug file '$path' for writing: '$!'");
+
+    print $fh $msg or confess("Failed to write to '$path'");
+    close $fh or confess("Failed to flush write to '$path'");
+}
+
+# Get the localtime and return ISO 8601 date including milliseconds
+# Returns %Y-%m-%d %H:%M:%S.%4f
+sub _localtime_human {
+    my @data = localtime();
+    my $time = time();
+    my $ms   = sprintf("%04d", ($time - int($time)) * 10000);
+
+    return sprintf("%4d-%02d-%02d %02d:%02d:%02d.%04d", 
+	$data[5] + 1900, $data[4], $data[3], $data[2], $data[1], $data[0], $ms);
+}
+
 
 sub sp_request_timeouted {
     my $response = shift // return undef;
@@ -225,6 +292,9 @@ sub sp_request_retry {
 sub sp_get {
     my $cfg   = shift;
     my $addr  = shift // debug_die("Missing GET address");
+
+    DEBUG("GET $addr");
+
     return sp_request_retry( sub {
 	sp_request($cfg, 'GET', $addr, undef);
     });
@@ -234,6 +304,9 @@ sub sp_post {
     my $cfg    = shift;
     my $addr   = shift // debug_die("Missing POST address");
     my $params = shift;
+
+    DEBUG("POST $addr: '".Dumper($params)."'");
+
     return sp_request_retry( sub {
 	sp_request($cfg, 'POST', $addr, $params);
     });
@@ -283,6 +356,8 @@ sub sp_request {
     my $duration = time() - $start;
 
     sp_request_log_response($method, $addr, $response, $duration);
+
+    DEBUG("RESULT: $method $addr $response $duration");
 
     if ($response->code eq "200"){
 	undef $@;
@@ -1006,7 +1081,7 @@ sub cfg_format_version($) {
     return ($major, $minor);
 }
 
-# Get some storpool settings from storpool.conf
+# Get some storpool settings from storpool.conf and /etc/storpool.conf.d/
 sub sp_confget() {
     my %res;
     open my $f, '-|', 'storpool_confget'
@@ -1203,6 +1278,8 @@ sub activate_storage {
     my $cache	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
 
+    DEBUG( "activate_storage: storeid: %s, scfg: %s , cache: %s", $storeid, $scfg, $cache );
+
     sp_temp_get($cfg, sp_get_template($cfg));
 }
 
@@ -1270,6 +1347,8 @@ sub alloc_image {
     my $size	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
 
+    DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
+	$storeid, $scfg, $vmid, $fmt, $name, $size );
     # One of the few places where size is in K
     $size *= 1024;
     log_and_die("unsupported format '$fmt'") if $fmt ne 'raw';
@@ -1324,7 +1403,9 @@ sub alloc_image {
 	$vol->{snapshot},
 	1
     );
-    return sp_encode_volsnap_from_tags($vol);
+    my $result = sp_encode_volsnap_from_tags($vol);
+    DEBUG('alloc_image result: %s', $result);
+    return $result;
 }
 
 # Status of the space of the storage
@@ -1337,6 +1418,8 @@ sub status {
     my $name	= sp_get_template($cfg);
     my @ours = grep { $_->{name} eq $name} @{ sp_temp_status($cfg)->{data} };
 
+    DEBUG( 'status: storeid %s, scfg %s, cache %s, name %s', $storeid, $scfg, $cache, $name );
+
     if (@ours != 1) {
 	log_and_die "StorPool internal error: expected exactly one '$name' "
 	    ."entry in the 'template status' output, got ".Dumper(\@ours);
@@ -1344,6 +1427,7 @@ sub status {
 
     my ($capacity, $free) =
 	($ours[0]->{stored}->{capacity}, $ours[0]->{stored}->{free});
+    DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
     return ($capacity, $free, $capacity - $free, 1);
 }
 
@@ -1352,11 +1436,23 @@ sub parse_volname ($;$) {
     my $volname = shift;
     my $cfg	= shift;
 
+    DEBUG('parse_volname: volname %s, cfg %s', $volname, $cfg);
     # needed for decoding cloud-init volumes and not supplied by PVE::Storage
     $cfg //= sp_cfg(undef, undef);
 
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
 
+    DEBUG(
+	'parse_volname result: vtype %s, name %s, vmid %s, basename %s, '
+	    .'basevmid %s, isBase %s, format %s',
+	$vol->{tags}->{VTAG_TYPE()},
+	$vol->{globalId},
+	$vol->{tags}->{VTAG_VM()},
+	undef,
+	undef,
+	($vol->{tags}->{VTAG_BASE()} // '0') eq '1',
+	'raw',	
+    );
     return (
 	$vol->{tags}->{VTAG_TYPE()},
 	$vol->{globalId},
@@ -1374,6 +1470,8 @@ sub filesystem_path {
     my $volname  = shift;
     my $snapname = shift;
 
+    DEBUG('filesystem_path: scfg %s, volname %s, snapname %s',
+	$scfg, $volname, $snapname);
     # tags->VTAG_TYPE, globalId, tags->VTAG_VM
     my ($vtype, $name, $vmid) = $self->parse_volname("$volname");
 
@@ -1386,6 +1484,8 @@ sub filesystem_path {
 	log_and_die("StorPool internal error: bad block device path $path");
     }
 
+    DEBUG('filesystem_path result: path %s, vmid %s, vtype %s, is_array %s',
+	$path, $vmid, $vtype, wantarray);
     return wantarray ? ($path, $vmid, $vtype) : $path;
 }
 
@@ -1437,6 +1537,9 @@ sub activate_volume {
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
 
+    DEBUG('activate_volume: storeid %s, scfg %s, volname %s, exclusive %s',
+	$storeid, $scfg, $volname, $exclusive);
+
     if (!sp_is_empty($vmid)) {
 	log_info("Volume $vol->{name} is related to VM $vmid, checking status");
 	my $vm_status = get_vm_status($vmid);
@@ -1466,6 +1569,7 @@ sub activate_volume {
 	$vol->{snapshot},
 	$force_detach
     );
+    DEBUG('activate_volume done');
     if (!-e $path){
 	log_and_die "Internal StorPool error: could not find the just-attached"
 	    ." volume $global_id at $path"
