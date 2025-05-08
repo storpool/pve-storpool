@@ -316,7 +316,7 @@ sub sp_post {
     my $addr   = shift // debug_die("Missing POST address");
     my $params = shift;
 
-    DEBUG("POST $addr: '".Dumper($params)."'");
+    DEBUG("POST $addr: '%s'", $params);
 
     return sp_request_retry( sub {
 	sp_request($cfg, 'POST', $addr, $params);
