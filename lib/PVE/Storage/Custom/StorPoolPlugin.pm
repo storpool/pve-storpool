@@ -229,7 +229,7 @@ sub DEBUG {
 	$msg = longmess($msg);
     }
 
-    $msg = _localtime_human() . " took $duration: " . $msg . "\n";
+    $msg = _localtime_human() . " [$$] took $duration: " . $msg . "\n";
 
     open( my $fh, '>>', $path ) 
 	or confess("Failed to open debug file '$path' for writing: '$!'");
