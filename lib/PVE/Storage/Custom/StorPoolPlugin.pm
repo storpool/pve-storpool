@@ -221,7 +221,7 @@ sub DEBUG {
 
     ($path) = ( $path =~ m{^((?:/[\w\-]+)*[\w\-]+\.\w+)$} );
 
-    confess("Invalid path _SP_PVE_DEBUG_PATH. Try with /var/log/storpool/debug.log")
+    confess("Invalid path '$config->{_SP_PVE_DEBUG_PATH}'. Try with /var/log/storpool/debug.log")
 	if !$path;
 
     if( scalar(@$data) ) {
@@ -368,7 +368,7 @@ sub sp_request {
 
     sp_request_log_response($method, $addr, $response, $duration);
 
-    DEBUG("RESULT: $method $addr $response $duration");
+    DEBUG("RESULT: %s %s %s %s", $method, $addr, $response, $duration);
 
     if ($response->code eq "200"){
 	undef $@;
