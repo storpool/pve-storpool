@@ -193,6 +193,7 @@ sub debug_die {
 # NOTE file is not locked, so concurrent writes may lead to messy messages
 # NOTE configuration is cached, so you must restart the services on change
 # NOTE function is disabled during the unit tests
+# XXX DON'T use any other debug function here - beware of recursion
 sub DEBUG {
     return if $ENV{PLUGIN_TEST}; # during the tests sp_confget is unavailable
     my $msg	  = shift // 'Empty message';
@@ -215,8 +216,13 @@ sub DEBUG {
     my $path	  = $config->{_SP_PVE_DEBUG_PATH};
 
     return if !$lvl;
-    debug_die("Missing debug path, set _SP_PVE_DEBUG_PATH and restart") if !$path;
-    debug_die("Message must be a string") if ref($msg);
+    confess("Missing debug path, set _SP_PVE_DEBUG_PATH and restart") if !$path;
+    confess("Message must be a string") if ref($msg);
+
+    ($path) = ( $path =~ m{^((?:/[\w\-]+)*[\w\-]+\.\w+)$} );
+
+    confess("Invalid path _SP_PVE_DEBUG_PATH. Try with /var/log/storpool/debug.log")
+	if !$path;
 
     if( scalar(@$data) ) {
         $msg = sprintf($msg, 
