@@ -197,7 +197,7 @@ sub DEBUG {
     return if $ENV{PLUGIN_TEST}; # during the tests sp_confget is unavailable
     my $msg	  = shift // 'Empty message';
     my $data	  = [ @_ ];
-    state $config = sp_confget() || {};
+    state $config = { sp_confget() };
     state $timing = time(); # Time of last call
     my $time	  = time(); # Time now, must be hi-res
     my $duration  = sprintf("%.4f", $time - $timing);
@@ -206,7 +206,7 @@ sub DEBUG {
 
     # Reload config if last debug was more than 10 sec ago
     if( $duration > 10 ) {
-	$config = sp_confget() || {};
+	$config = { sp_confget() };
     }
 
     return if !$config || ref($config) ne 'HASH';
