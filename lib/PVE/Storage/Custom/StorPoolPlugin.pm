@@ -1709,7 +1709,7 @@ sub volume_size_info {
 	log_and_die "Internal error: unexpected size '$size' for $volname";
     }
 
-    DEBUG('volume_size_info result: size %, type raw', $size);
+    DEBUG('volume_size_info result: size %s, type raw', $size);
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
     return wantarray ? ($size, 'raw', $size, undef) : $size;
