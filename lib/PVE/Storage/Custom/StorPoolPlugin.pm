@@ -7,7 +7,7 @@ use strict;
 use warnings;
 use version; our $VERSION = version->declare("v0.5.2");
 
-use Carp qw/carp croak confess longmess/;
+use Carp qw/carp croak confess shortmess longmess/;
 use Config::IniFiles;
 use Data::Dumper;
 use File::Path;
@@ -158,25 +158,103 @@ my $SP_VERS = '1.0';
 sub log_and_die {
     my $msg = shift // "Missing message!";
 
+    DEBUG( $msg );
     syslog 'err', 'StorPool plugin: %s', $msg;
     croak "$msg\n";
 }
 
 sub log_info {
     my $msg = shift // '';
+
+    DEBUG( $msg );
     syslog 'info', 'StorPool plugin: %s', $msg;
 }
 
 sub debug_info {
     my $msg = shift // '';
+
+    DEBUG( $msg );
     syslog 'info', 'StorPool plugin: %s', longmess($msg);
 }
 
 sub debug_die {
     my $msg = shift // '';
-    syslog 'err', 'StorPool plugin: %s', $msg;
+
+    DEBUG( $msg );
+    syslog 'err', 'StorPool plugin: %s', longmess($msg);
     confess "$msg\n";
 }
+
+# Debug [trace] to file
+# Usage DEBUG("Message, data %s, %s", {data=>123}, [1])
+# create proxmox.conf file in /etc/storpool.conf.d/
+# define _SP_PVE_DEBUG=[012] 0 disable 1 log 2 trace
+# define _SP_PVE_DEBUG_PATH=IO::Path path to the file - pref /var/log/storpool/
+# NOTE file is not locked, so concurrent writes may lead to messy messages
+# NOTE configuration is cached, so you must restart the services on change
+# NOTE function is disabled during the unit tests
+# XXX DON'T use any other debug function here - beware of recursion
+sub DEBUG {
+    return if $ENV{PLUGIN_TEST}; # during the tests sp_confget is unavailable
+    my $msg	  = shift // 'Empty message';
+    my $data	  = [ @_ ];
+    state $config = { sp_confget() };
+    state $timing = time(); # Time of last call
+    my $time	  = time(); # Time now, must be hi-res
+    my $duration  = sprintf("%.4f", $time - $timing);
+
+    $timing = $time;
+
+    # Reload config if last debug was more than 10 sec ago
+    if( $duration > 10 ) {
+	$config = { sp_confget() };
+    }
+
+    return if !$config || ref($config) ne 'HASH';
+
+    my $lvl	  = $config->{_SP_PVE_DEBUG};
+    my $path	  = $config->{_SP_PVE_DEBUG_PATH};
+
+    return if !$lvl;
+    confess("Missing debug path, set _SP_PVE_DEBUG_PATH and restart") if !$path;
+    confess("Message must be a string") if ref($msg);
+
+    ($path) = ( $path =~ m{^((?:/[\w\-]+)*[\w\-]+\.\w+)$} );
+
+    confess("Invalid path '$config->{_SP_PVE_DEBUG_PATH}'. Try with /var/log/storpool/debug.log")
+	if !$path;
+
+    if( scalar(@$data) ) {
+        $msg = sprintf($msg, 
+	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
+    }
+
+    if( $lvl eq '1' ){
+	$msg = shortmess($msg);
+    } else {
+	$msg = longmess($msg);
+    }
+
+    $msg = _localtime_human() . " [$$] took $duration: " . $msg . "\n";
+
+    open( my $fh, '>>', $path ) 
+	or confess("Failed to open debug file '$path' for writing: '$!'");
+
+    print $fh $msg or confess("Failed to write to '$path'");
+    close $fh or confess("Failed to flush write to '$path'");
+}
+
+# Get the localtime and return ISO 8601 date including milliseconds
+# Returns %Y-%m-%d %H:%M:%S.%4f
+sub _localtime_human {
+    my @data = localtime();
+    my $time = time();
+    my $ms   = sprintf("%04d", ($time - int($time)) * 10000);
+
+    return sprintf("%4d-%02d-%02d %02d:%02d:%02d.%04d", 
+	$data[5] + 1900, $data[4], $data[3], $data[2], $data[1], $data[0], $ms);
+}
+
 
 sub sp_request_timeouted {
     my $response = shift // return undef;
@@ -225,6 +303,9 @@ sub sp_request_retry {
 sub sp_get {
     my $cfg   = shift;
     my $addr  = shift // debug_die("Missing GET address");
+
+    DEBUG("GET $addr");
+
     return sp_request_retry( sub {
 	sp_request($cfg, 'GET', $addr, undef);
     });
@@ -234,6 +315,9 @@ sub sp_post {
     my $cfg    = shift;
     my $addr   = shift // debug_die("Missing POST address");
     my $params = shift;
+
+    DEBUG("POST $addr: '%s'", $params);
+
     return sp_request_retry( sub {
 	sp_request($cfg, 'POST', $addr, $params);
     });
@@ -283,6 +367,8 @@ sub sp_request {
     my $duration = time() - $start;
 
     sp_request_log_response($method, $addr, $response, $duration);
+
+    DEBUG("RESULT: %s %s %s %s", $method, $addr, $response, $duration);
 
     if ($response->code eq "200"){
 	undef $@;
@@ -1006,7 +1092,7 @@ sub cfg_format_version($) {
     return ($major, $minor);
 }
 
-# Get some storpool settings from storpool.conf
+# Get some storpool settings from storpool.conf and /etc/storpool.conf.d/
 sub sp_confget() {
     my %res;
     open my $f, '-|', 'storpool_confget'
@@ -1203,6 +1289,8 @@ sub activate_storage {
     my $cache	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
 
+    DEBUG( "activate_storage: storeid: %s, scfg: %s , cache: %s", $storeid, $scfg, $cache );
+
     sp_temp_get($cfg, sp_get_template($cfg));
 }
 
@@ -1270,6 +1358,8 @@ sub alloc_image {
     my $size	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
 
+    DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
+	$storeid, $scfg, $vmid, $fmt, $name, $size );
     # One of the few places where size is in K
     $size *= 1024;
     log_and_die("unsupported format '$fmt'") if $fmt ne 'raw';
@@ -1324,7 +1414,9 @@ sub alloc_image {
 	$vol->{snapshot},
 	1
     );
-    return sp_encode_volsnap_from_tags($vol);
+    my $result = sp_encode_volsnap_from_tags($vol);
+    DEBUG('alloc_image result: %s', $result);
+    return $result;
 }
 
 # Status of the space of the storage
@@ -1337,6 +1429,8 @@ sub status {
     my $name	= sp_get_template($cfg);
     my @ours = grep { $_->{name} eq $name} @{ sp_temp_status($cfg)->{data} };
 
+    DEBUG( 'status: storeid %s, scfg %s, cache %s, name %s', $storeid, $scfg, $cache, $name );
+
     if (@ours != 1) {
 	log_and_die "StorPool internal error: expected exactly one '$name' "
 	    ."entry in the 'template status' output, got ".Dumper(\@ours);
@@ -1344,6 +1438,7 @@ sub status {
 
     my ($capacity, $free) =
 	($ours[0]->{stored}->{capacity}, $ours[0]->{stored}->{free});
+    DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
     return ($capacity, $free, $capacity - $free, 1);
 }
 
@@ -1352,11 +1447,23 @@ sub parse_volname ($;$) {
     my $volname = shift;
     my $cfg	= shift;
 
+    DEBUG('parse_volname: volname %s, cfg %s', $volname, $cfg);
     # needed for decoding cloud-init volumes and not supplied by PVE::Storage
     $cfg //= sp_cfg(undef, undef);
 
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
 
+    DEBUG(
+	'parse_volname result: vtype %s, name %s, vmid %s, basename %s, '
+	    .'basevmid %s, isBase %s, format %s',
+	$vol->{tags}->{VTAG_TYPE()},
+	$vol->{globalId},
+	$vol->{tags}->{VTAG_VM()},
+	undef,
+	undef,
+	($vol->{tags}->{VTAG_BASE()} // '0') eq '1',
+	'raw',	
+    );
     return (
 	$vol->{tags}->{VTAG_TYPE()},
 	$vol->{globalId},
@@ -1374,6 +1481,8 @@ sub filesystem_path {
     my $volname  = shift;
     my $snapname = shift;
 
+    DEBUG('filesystem_path: scfg %s, volname %s, snapname %s',
+	$scfg, $volname, $snapname);
     # tags->VTAG_TYPE, globalId, tags->VTAG_VM
     my ($vtype, $name, $vmid) = $self->parse_volname("$volname");
 
@@ -1386,6 +1495,8 @@ sub filesystem_path {
 	log_and_die("StorPool internal error: bad block device path $path");
     }
 
+    DEBUG('filesystem_path result: path %s, vmid %s, vtype %s, is_array %s',
+	$path, $vmid, $vtype, wantarray);
     return wantarray ? ($path, $vmid, $vtype) : $path;
 }
 
@@ -1437,6 +1548,9 @@ sub activate_volume {
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
 
+    DEBUG('activate_volume: storeid %s, scfg %s, volname %s, exclusive %s',
+	$storeid, $scfg, $volname, $exclusive);
+
     if (!sp_is_empty($vmid)) {
 	log_info("Volume $vol->{name} is related to VM $vmid, checking status");
 	my $vm_status = get_vm_status($vmid);
@@ -1466,6 +1580,7 @@ sub activate_volume {
 	$vol->{snapshot},
 	$force_detach
     );
+    DEBUG('activate_volume done');
     if (!-e $path){
 	log_and_die "Internal StorPool error: could not find the just-attached"
 	    ." volume $global_id at $path"
@@ -1481,14 +1596,18 @@ sub deactivate_volume {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $path	= $self->path($scfg, $volname, $storeid);
 
+    DEBUG('deactivate_volume: storeid %s, scfg %s, volname %s, path %s, exist %s',
+	$storeid, $scfg, $volname, $path, -b $path);
     return if ! -b $path;
 
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my $global_id = $vol->{globalId};
 
     # TODO: pp: remove this when the configuration goes into the plugin?
-    sp_vol_attach(
+    my $result = sp_vol_attach(
 	$cfg, $global_id, $cfg->{api}->{ourid}, 'ro', 0, $vol->{snapshot}, 0);
+    DEBUG('deactivate_volume result: %s', $result);
+    return $result;
 }
 
 sub free_image {
@@ -1501,6 +1620,8 @@ sub free_image {
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $is_snapshot) = ($vol->{globalId}, $vol->{snapshot});
 
+    DEBUG('free_image: storeid %s, scfg %s, volname %s, is_base %s, vol %s',
+	$storeid, $scfg, $volname, $is_base, $vol);
     # Volume could already be detached, we do not care about errors
     sp_vol_detach($cfg, $global_id, 'all', 1, $is_snapshot);
 
@@ -1511,6 +1632,7 @@ sub free_image {
 	sp_clean_snaps($cfg, $vol);
     }
 
+    DEBUG('free_image done');
     return
 }
 
@@ -1524,6 +1646,9 @@ sub volume_has_feature {
     my $running  = shift;
     my $key	 = undef;
 
+    DEBUG('volume_has_feature: scfg %s, feature %s, storeid %s, volname %s,'
+	.'snapname %s, running %s',
+	$scfg, $feature, $storeid, $volname, $snapname, $running);
     my $features = {
 	snapshot    => { current => 1, snap => 1 },
 	clone	    => { base => 1, current => 1, snap => 1 },
@@ -1542,6 +1667,8 @@ sub volume_has_feature {
 	$key =  $isBase ? 'base' : 'current';
     }
 
+    DEBUG('volume_has_feature result: has_feature? %s',
+	$features->{$feature}->{$key} ? 1 : 0 );
     return 1 if defined $features->{$feature}->{$key};
 
     return;
@@ -1565,6 +1692,9 @@ sub volume_size_info {
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
     my $vol_desc;
 
+    DEBUG('volume_size_info: scfg %s, storeid %s, volname %, timeout %s',
+	$scfg, $storeid, $volname, $timeout);
+
     if( $vol->{snapshot} ) {
 	$vol_desc = sp_snap_info_single($cfg, $vol->{globalId});
     } else {
@@ -1578,6 +1708,8 @@ sub volume_size_info {
     } else {
 	log_and_die "Internal error: unexpected size '$size' for $volname";
     }
+
+    DEBUG('volume_size_info result: size %s, type raw', $size);
 
     # TODO: pp: do we ever need to support anything other than 'raw' here?
     return wantarray ? ($size, 'raw', $size, undef) : $size;
@@ -1594,6 +1726,10 @@ sub list_volumes_with_cache {
     my %ctypes    = map { $_ => 1 } @{$content_types};
     my $volStatus = sp_volsnap_list_with_cache($cfg, $cache);
     my $res	  = [];
+
+    DEBUG(
+	'list_volumes_with_cache: storeid %s,scfg %s,vmid %s,content-types %s',
+	$storeid, $scfg, $vmid, $content_types);
 
     for my $vol (@{$volStatus->{data}->{volumes}}) {
 	next if !sp_is_ours($cfg, $vol);
@@ -1620,10 +1756,13 @@ sub list_volumes_with_cache {
 	push @{$res}, $data;
     }
 
+    DEBUG('list_volumes_with_cache result: %s', $res);
+
     return $res;
 }
 
 sub list_volumes {
+    DEBUG('list_volumes');
     return list_volumes_with_cache( @_, {} );
 }
 
@@ -1635,6 +1774,8 @@ sub list_images {
     my $vollist = shift;
     my $cache	= shift;
 
+    DEBUG('list_images: storeid %s, scfg %s, vmid %s, vollist %s',
+	$storeid, $scfg, $vmid, $vollist);
     if (defined $vollist) {
 	log_and_die "TODO: list_images() with a volume list not implemented "
 	    ."yet: ".Dumper(\$vmid, $vollist);
@@ -1653,6 +1794,9 @@ sub create_base {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $vtype) = ($vol->{'globalId'}, $vol->{tags}->{VTAG_TYPE()});
+
+    DEBUG('create_base: storeid %s, scfg %s, volname %s, vol %s',
+	$storeid, $scfg, $volname, $vol);
 
     # my ($vtype, $name, $vmid, undef, undef, $isBase) =
 	# $self->parse_volname($volname);
@@ -1686,7 +1830,9 @@ sub create_base {
     sp_vol_detach($cfg, $global_id, 'all', 0);
     sp_vol_del($cfg, $global_id, 0);
 
-    return sp_encode_volsnap_from_tags($snap);
+    my $result = sp_encode_volsnap_from_tags($snap);
+    DEBUG('create_base result: name %s', $result);
+    return $result;
 }
 
 sub clone_image {
@@ -1698,6 +1844,9 @@ sub clone_image {
     my $snap	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
+
+    DEBUG('clone_image: scfg %s, storeid %s, volname %s, vmid %s, snap %s, vol %s',
+	$scfg, $storeid, $volname, $vmid, $snap, $vol);
 
     if ($snap) {
 	my @found = sp_volume_find_snapshots($cfg, $vol, $snap);
@@ -1753,7 +1902,10 @@ sub clone_image {
     }
 
     my $newvol = sp_vol_info_single($cfg, $c_res->{data}->{globalId});
-    return sp_encode_volsnap_from_tags($newvol);
+
+    my $result = sp_encode_volsnap_from_tags($newvol);
+    DEBUG('clone_image result: name %s', $result);
+    return $result;
 }
 
 sub volume_resize {
@@ -1766,12 +1918,15 @@ sub volume_resize {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
+    DEBUG('volume_resize: scfg %s, storeid %s, volname %s, size %s, run %s, vol %s',
+	$scfg, $storeid, $volname, $size, $running, $vol);
     sp_vol_update($cfg, $vol->{globalId}, { size => $size }, 0);
 
     # Make sure storpool_bd has told the kernel to update
     # the attached volume's size if needed
     my $res = sp_client_sync($cfg, $cfg->{api}->{ourid});
 
+    DEBUG('volume_resize: done');
     return 1;
 }
 
@@ -1789,12 +1944,17 @@ sub check_connection {
     my $self	= shift;
     my $storeid = shift;
     my $scfg	= shift;
+
+    DEBUG('check_connection: enter');
+
     my $cfg	= sp_cfg($scfg, $storeid);
     my $res	= sp_services_list($cfg);
 
-    die "Could not fetch the StorPool services list\n" if !defined $res;
-    die "Could not fetch the StorPool services list: $res->{error}\n"
+
+    log_and_die "Could not fetch the StorPool services list\n" if !defined $res;
+    log_and_die "Could not fetch the StorPool services list: $res->{error}\n"
 	if $res->{error};
+    DEBUG('check_connection: done');
     return 1;
 }
 
@@ -1808,6 +1968,9 @@ sub volume_snapshot {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
+    DEBUG('volume_snapshot: scfg %s, storeid %s, volname %s, snap %s, run %s,vol %s',
+	$scfg, $storeid, $volname, $snap, $running, $vol);
+
     sp_vol_snapshot(
 	$cfg,
 	$vol->{'globalId'},
@@ -1820,6 +1983,7 @@ sub volume_snapshot {
 	}
     );
 
+    DEBUG('volume_snapshot: done');
     return;
 }
 
@@ -1833,10 +1997,17 @@ sub volume_snapshot_delete {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
+    DEBUG(
+	'volume_snapshot_delete: scfg %s, storeid %s, volname %s, '
+	.'snap %s, run %s, vol %s',
+	$scfg, $storeid, $volname, $snap, $running, $vol);
+
+
     for my $snap_obj (sp_volume_find_snapshots($cfg, $vol, $snap)) {
 	sp_snap_del($cfg, $snap_obj->{globalId}, 0);
     }
 
+    DEBUG('volume_snapshot_delete: done');
     return
 }
 
@@ -1850,6 +2021,10 @@ sub volume_snapshot_rollback {
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
     my @found	= sp_volume_find_snapshots($cfg, $vol, $snap);
 
+    DEBUG('volume_snapshot_rollback: scfg %s, storeid %s, volname %s, snap %s,'
+	.'vol %s, found %s',
+	$scfg, $storeid, $volname, $snap, $vol, \@found);
+
     if (@found != 1) {
 	log_and_die(
 	    "volume_snapshot_rollback: expected exactly one '$snap' snapshot "
@@ -1861,6 +2036,7 @@ sub volume_snapshot_rollback {
     sp_vol_detach($cfg, $vol->{'globalId'}, 'all', 0);
     sp_vol_revert_to_snapshot($cfg, $vol->{globalId}, $snap_obj->{globalId});
 
+    DEBUG('volume_snapshot_rollback: done');
     return
 }
 
@@ -1919,6 +2095,10 @@ sub rename_volume($$$$$$) {
     my $cfg		= sp_cfg($scfg, $storeid);
     my $vol		= sp_decode_volsnap_to_tags($source_volname, $cfg);
 
+    DEBUG('rename_volume: scfg %s, storeid %s, source_volname %s,'
+	.'target_vmid %s, target_volume %s, vol %s',
+	$scfg, $storeid, $source_volname, $target_vmid, $target_volname, $vol);
+
     sp_vol_update($cfg, $vol->{'globalId'}, {
 	tags => {
 	    %{$vol->{tags}},
@@ -1927,7 +2107,9 @@ sub rename_volume($$$$$$) {
     }, 0);
 
     my $updated = sp_vol_info_single($cfg, $vol->{globalId});
-    return "$storeid:" . sp_encode_volsnap_from_tags($updated)
+    my $result = "$storeid:" . sp_encode_volsnap_from_tags($updated);
+    DEBUG('rename_volume result: volumeID %s', $result);
+    return $result;
 }
 
 1;
