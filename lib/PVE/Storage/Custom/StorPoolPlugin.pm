@@ -206,7 +206,7 @@ sub DEBUG {
     $timing = $time;
 
     # Reload config if last debug was more than 10 sec ago
-    if( $duration > 10 ) {
+    if( $duration > 30 ) {
 	$config = { sp_confget() };
     }
 
@@ -253,6 +253,49 @@ sub _localtime_human {
 
     return sprintf("%4d-%02d-%02d %02d:%02d:%02d.%04d", 
 	$data[5] + 1900, $data[4], $data[3], $data[2], $data[1], $data[0], $ms);
+}
+
+# Get disk quota in bytes
+# return undef when no quota is set
+sub _get_quota {
+    my $config = { sp_confget() };
+    my $quota  = $config->{SP_PVE_QUOTA};
+    my @prefix = qw/B KB MB GB TB PB EB/;
+
+    return if !$quota;
+
+    my ( $val, $unit ) = ( $quota =~ /^(\d+)\s*([KMGTPE]B)?\s*$/i );
+    $unit = uc($unit) if $unit;
+
+    return $val if !$unit; # Bytes set in config
+
+    while( shift @prefix ne $unit ) {
+        $val = $val * 1024
+    }
+
+    return int($val);
+}
+
+sub _to_human_bytes {
+    my $bytes = int(shift) || return 0;
+    my @prefix = qw/KB MB GB TB PB EB/;
+    my $prefix = '';
+    my $mod    = $bytes % 1024;
+
+    while( $bytes >= 1024 ) {
+	$prefix = shift @prefix;
+	$bytes = $bytes / 1024;
+    }
+    return $bytes.$prefix if $bytes < int($bytes);
+    return sprintf("%.2f$prefix",$bytes);
+}
+
+sub _get_template_disk_space {
+    my $storeid = shift;
+    my $cfg	= sp_cfg({}, $storeid);
+    my $vols    = sp_vol_list($cfg);
+
+
 }
 
 
@@ -461,6 +504,21 @@ sub sp_vol_list($) {
     log_and_die($res->{error}->{descr}) if $res->{error};
 
     return $res;
+}
+
+sub _get_proxmox_cluster_volumes_total_size {
+    my $cfg	= shift || return;
+    my $volumes = sp_vol_list($cfg) || {data=>[]};
+    my $taken	= 0;
+
+    foreach my $volume ( @{ $volumes->{data} } ){
+	# Skip volumes not belonging to proxmox at all
+	next if !sp_vol_tag_is($volume, VTAG_VIRT, VTAG_V_PVE);
+	# Skip volumes not belonging to this proxmox cluster
+	next if !sp_vol_tag_is($volume, VTAG_LOC, sp_get_loc_name($cfg));
+	$taken += int($volume->{size} || 0);
+    }
+    return $taken
 }
 
 sub sp_vol_info($$) {
@@ -1174,7 +1232,7 @@ sub sp_cfg($$) {
 
 sub api {
     my $minver = 3;
-    my $maxver = 10;
+    my $maxver = 11;
 
     # We kind of depend on the way `use constant` declares a function.
     # If we try to use barewords and not functions, the compiler will
@@ -1355,11 +1413,34 @@ sub alloc_image {
     my $vmid	= shift;
     my $fmt	= shift;
     my $name	= shift;
-    my $size	= shift;
+    my $size	= shift; # Size in Kb
     my $cfg	= sp_cfg($scfg, $storeid);
+    my $quota	= _get_quota();
+    my $taken   = 0; # In bytes
+    my $size_b  = $size * 1024;
 
     DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
 	$storeid, $scfg, $vmid, $fmt, $name, $size );
+
+    if( defined $quota ){
+	DEBUG("Quota enabled: $quota, list all volumes");
+	$taken = _get_proxmox_cluster_volumes_total_size($cfg);
+
+	my $free  = $quota - $taken;
+	my ($name) = ( sp_get_loc_name($cfg) =~ /^(.*)$/ );
+
+	DEBUG("VOL-SIZE $taken $free LOCATIN $name");
+	if( $size_b > $quota || ($taken > 0 && $size_b > $free) ) {
+	    DEBUG("Requested size '$size_b' exceedes free space '$free'");
+	    $free = 0 if $free < 0;
+	    my $free_human = _to_human_bytes( $free );
+	    log_and_die("Not enough space on disk. Free space: $free_human");
+	} else {
+	    DEBUG("Requested size '$size' wont exceed the quota '$quota'");
+	}
+    }
+
+
     # One of the few places where size is in K
     $size *= 1024;
     log_and_die("unsupported format '$fmt'") if $fmt ne 'raw';
@@ -1427,7 +1508,8 @@ sub status {
     my $cache	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $name	= sp_get_template($cfg);
-    my @ours = grep { $_->{name} eq $name} @{ sp_temp_status($cfg)->{data} };
+    my $quota	= _get_quota();
+    my @ours	= grep { $_->{name} eq $name} @{ sp_temp_status($cfg)->{data} };
 
     DEBUG( 'status: storeid %s, scfg %s, cache %s, name %s', $storeid, $scfg, $cache, $name );
 
@@ -1438,7 +1520,19 @@ sub status {
 
     my ($capacity, $free) =
 	($ours[0]->{stored}->{capacity}, $ours[0]->{stored}->{free});
-    DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
+
+
+    if( defined $quota ){
+	my $stored = $ours[0]->{size} || 0;
+	$stored = ($stored  / 1024 ** 3) * 1000 ** 3 if $stored;
+	$quota  = ($quota  / 1024 ** 3) * 1000 ** 3  if $quota;
+
+	DEBUG( 'status result: quota %s, free %s', $quota, $quota - $stored );
+	return ($quota, $quota - $stored, $stored, 1);
+    } else {
+        DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
+    }
+
     return ($capacity, $free, $capacity - $free, 1);
 }
 
