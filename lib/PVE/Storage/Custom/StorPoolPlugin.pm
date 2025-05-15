@@ -225,8 +225,9 @@ sub DEBUG {
 	if !$path;
 
     if( scalar(@$data) ) {
-        $msg = sprintf($msg, 
-	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
+        $msg = sprintf($msg,(
+	    map{ /^(.*)$/ }
+	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data) )
     }
 
     if( $lvl eq '1' ){
@@ -276,19 +277,25 @@ sub _get_quota {
     return int($val);
 }
 
+
+# Convert bytes to human understandable format with prefix
+# 1024 -> 1KB
 sub _to_human_bytes {
     my $bytes = int(shift) || return 0;
-    my @prefix = qw/KB MB GB TB PB EB/;
-    my $prefix = '';
-    my $mod    = $bytes % 1024;
+    my @suffix = qw/KB MB GB TB PB EB/;
+    my $suffix = '';
+    my $prefix = $bytes < 0 ? '-' : '';
+
+    $bytes = abs($bytes);
 
     while( $bytes >= 1024 ) {
-	$prefix = shift @prefix;
+	$suffix = shift @suffix;
 	$bytes = $bytes / 1024;
     }
-    return $bytes.$prefix if $bytes <= int($bytes);
-    return sprintf("%.2f$prefix",$bytes);
+    return $prefix.$bytes.$suffix if $bytes <= int($bytes);
+    return sprintf("$prefix%.2f$suffix",$bytes);
 }
+
 
 sub sp_request_timeouted {
     my $response = shift // return undef;
@@ -1420,7 +1427,7 @@ sub alloc_image {
 	my $free  = $quota - $taken;
 	my ($name) = ( sp_get_loc_name($cfg) =~ /^(.*)$/ );
 
-	DEBUG("VOL-SIZE $taken $free LOCATIN $name");
+	DEBUG("VOL-SIZE $taken $free LOCATION $name");
 	if( $size_b > $quota || ($taken > 0 && $size_b > $free) ) {
 	    DEBUG("Requested size '$size_b' exceedes free space '$free'");
 	    $free = 0 if $free < 0;
@@ -1521,7 +1528,7 @@ sub status {
 	DEBUG( 'status result: quota %s, free %s', $quota, $quota - $stored );
 	return ($quota, $quota - $stored, $stored, 1);
     } else {
-        DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
+	DEBUG( 'status result: capacity %s, free %s', $capacity, $free );
     }
 
     return ($capacity, $free, $capacity - $free, 1);
@@ -1998,13 +2005,42 @@ sub volume_resize {
     my $scfg	= shift;
     my $storeid = shift;
     my $volname = shift;
-    my $size	= shift;
+    my $size	= shift; # New disk size in bytes
     my $running = shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
+    my $quota	= _get_quota();
 
     DEBUG('volume_resize: scfg %s, storeid %s, volname %s, size %s, run %s, vol %s',
 	$scfg, $storeid, $volname, $size, $running, $vol);
+
+    if( defined $quota ){
+	DEBUG("quota enabled: quota %s", _to_human_bytes($quota));
+	log_and_die("New volume size exceedes the available disk space: total "
+	    . _to_human_bytes($quota)) 
+	    if $size > $quota;
+	my $vol	    = sp_decode_volsnap_to_tags($volname, $cfg);
+	my $volume  = sp_vol_desc($cfg, $vol->{globalId})->{data} || {};
+	my $vol_size= int($volume->{size} || 0);
+
+	log_and_die("Failed to find the old disk $volname") if !$vol_size;
+
+	my $diff    = $size - $vol_size;
+	if( $diff > 0 ) { # Volume is growing
+	    my $taken_space = _get_proxmox_cluster_volumes_total_size($cfg);
+	    my $free_space  = $quota - $taken_space;
+	    $free_space = 0 if $free_space < 0;
+
+	    DEBUG('volume growing: free space '._to_human_bytes($free_space));
+	    log_and_die("Not enough disk space when resizing volume: available "
+		. _to_human_bytes($free_space))
+		if $diff > $free_space;
+	} else {
+	    DEBUG('volume shrinking');
+	}
+    }
+
+
     sp_vol_update($cfg, $vol->{globalId}, { size => $size }, 0);
 
     # Make sure storpool_bd has told the kernel to update
