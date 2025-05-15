@@ -286,7 +286,7 @@ sub _to_human_bytes {
 	$prefix = shift @prefix;
 	$bytes = $bytes / 1024;
     }
-    return $bytes.$prefix if $bytes < int($bytes);
+    return $bytes.$prefix if $bytes <= int($bytes);
     return sprintf("%.2f$prefix",$bytes);
 }
 
