@@ -1232,7 +1232,7 @@ sub sp_cfg($$) {
 
 sub api {
     my $minver = 3;
-    my $maxver = 11;
+    my $maxver = 10;
 
     # We kind of depend on the way `use constant` declares a function.
     # If we try to use barewords and not functions, the compiler will
