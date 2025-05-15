@@ -290,15 +290,6 @@ sub _to_human_bytes {
     return sprintf("%.2f$prefix",$bytes);
 }
 
-sub _get_template_disk_space {
-    my $storeid = shift;
-    my $cfg	= sp_cfg({}, $storeid);
-    my $vols    = sp_vol_list($cfg);
-
-
-}
-
-
 sub sp_request_timeouted {
     my $response = shift // return undef;
 
