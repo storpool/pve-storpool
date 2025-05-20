@@ -269,6 +269,7 @@ sub _get_quota {
     $unit = uc($unit) if $unit;
 
     return $val if !$unit; # Bytes set in config
+    return	if !$val; # 0GB etc.
 
     while( shift @prefix ne $unit ) {
         $val = $val * 1024
