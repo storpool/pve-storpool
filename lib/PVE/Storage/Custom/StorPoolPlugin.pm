@@ -265,7 +265,7 @@ sub _get_quota {
 
     return if !$quota;
 
-    my ( $val, $unit ) = ( $quota =~ /^(\d+)\s*([KMGTPE]B)?\s*$/i );
+    my ( $val, $unit ) = ( $quota =~ /^(\d+(?:\.\d+)?)\s*([KMGTPE]B)?\s*$/i );
     $unit = uc($unit) if $unit;
 
     return $val if !$unit; # Bytes set in config
