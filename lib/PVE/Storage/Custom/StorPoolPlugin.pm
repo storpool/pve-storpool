@@ -225,7 +225,8 @@ sub DEBUG {
 	if !$path;
 
     if( scalar(@$data) ) {
-        $msg = sprintf($msg, 
+        $msg = sprintf($msg,
+	    map{ /^(.*)$/ }
 	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
     }
 
@@ -1174,7 +1175,7 @@ sub sp_cfg($$) {
 
 sub api {
     my $minver = 3;
-    my $maxver = 10;
+    my $maxver = 11;
 
     # We kind of depend on the way `use constant` declares a function.
     # If we try to use barewords and not functions, the compiler will
@@ -1636,6 +1637,23 @@ sub free_image {
     return
 }
 
+
+# check if a volume or snapshot supports a given feature
+# $feature - one of:
+#            clone - linked clone is possible
+#            copy  - full clone is possible
+#            replicate - replication is possible
+#            snapshot - taking a snapshot is possible
+#            sparseinit - volume is sparsely initialized
+#            template - conversion to base image is possible
+#            rename - renaming volumes is possible
+# $snap - check if the feature is supported for a given snapshot
+# $running - if the guest owning the volume is running
+# $opts - hash with further options:
+#         valid_target_formats - list of formats for the target of a copy/clone
+#                                operation that the caller could work with. The
+#                                format of $volid is always considered valid and if
+#                                no list is specified, all formats are considered valid.
 sub volume_has_feature {
     my $self	 = shift;
     my $scfg	 = shift;
@@ -2111,6 +2129,44 @@ sub rename_volume($$$$$$) {
     DEBUG('rename_volume result: volumeID %s', $result);
     return $result;
 }
+
+sub volumes_atomic_snapshot_possible { 1 }
+
+sub atomic_snapshot_preferred { 1 }
+
+# Performs an atomic (crash-consistent) snapshot of all volumes at once.
+sub volumes_atomic_snapshot {
+    my $self	 = shift || debug_die("Missing object");
+    my $voldata  = shift || debug_die("Missing volume data");
+    my $snapname = shift || debug_die("Missing snapname");
+    my $sp_cfg;
+    my @volumes;
+
+    DEBUG('volumes_atomic_snapshot: voldata %s, snapname %s', $voldata, $snapname);
+
+    for my $volname (keys %$voldata) {
+	$sp_cfg = sp_cfg(
+	    $voldata->{$volname}->{scfg},
+	    $voldata->{$volname}->{storeid},
+        );
+	my $vol = sp_decode_volsnap_to_tags($volname, $sp_cfg);
+	my $snap_spec = {
+	    volume => $vol->{name},
+	    tags   => {
+		%{ $vol->{tags} },
+		sp_get_tags($sp_cfg),
+		VTAG_SNAP() => $snapname,
+		VTAG_SNAP_PARENT() => $vol->{globalId},
+	    },
+	};
+	push(@volumes, $snap_spec);
+    }
+
+    DEBUG('volumes_atomic_snapshot POST: volumes %s', \@volumes);
+    my $res = sp_post($sp_cfg, "VolumesGroupSnapshot", { volumes => \@volumes });
+    log_and_die("Storpool: ".$res->{error}->{descr}) if $res->{error};
+}
+
 
 1;
 #TODO when creating new storage, fix placementgroups
