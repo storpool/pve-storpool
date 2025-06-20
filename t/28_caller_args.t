@@ -2,7 +2,7 @@
 use v5.16;
 use strict;
 use warnings;
-use Test::More tests => 5;
+use Test::More tests => 6;
 use PVE::Storage::Custom::StorPoolPlugin;
 
 sub x { a(@_, 0) }
