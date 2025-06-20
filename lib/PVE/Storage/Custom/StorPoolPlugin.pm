@@ -255,6 +255,57 @@ sub _localtime_human {
 	$data[5] + 1900, $data[4], $data[3], $data[2], $data[1], $data[0], $ms);
 }
 
+sub _get_caller_args {
+    my $caller_num = shift // die "Missing caller position";
+    my %call_info;
+
+    $caller_num += 1; # Here we are already 1 lvl deeper, so jump back 1 lvl back
+
+    my $cgc = sub {
+	no strict 'refs';
+	return \&{"CORE::GLOBAL::caller"} if defined &{"CORE::GLOBAL::caller"};
+	return;
+    };
+
+    {
+    @DB::args = \$caller_num;
+    package DB;
+    @call_info{ qw(pack file line sub has_args wantarray evaltext is_require) } 
+	= $cgc->() ? $cgc->($caller_num) : caller($caller_num);
+    }
+
+    if( $call_info{has_args} ){
+	my @args = map {
+	    my $arg;
+	    local $@ = $@;
+	    eval { $arg = $_; 1 } or do { $arg = 'not available anymore' };
+	    $arg;
+	    } @DB::args;
+	if( 
+	    "$]" >= 5.015002 && @args == 1 && ref($args[0]) eq ref \$caller_num
+	    && $args[0] == \$caller_num
+	) {
+	    @args = ();
+	    warn '@DB::args not set';
+	}
+
+	return @args;
+    }
+    return;
+}
+
+sub _get_migration_source_node {
+    for( 0..10 ) {
+	my @args = _get_caller_args( $_ );
+	next if !scalar(@args);
+	my $found = [ map { $_->{migratedfrom} }
+	    grep { ref($_) && ref($_) eq 'HASH' && $_->{migratedfrom} } @args ];
+
+	return $found->[0] if $found->[0];
+    }
+    return;
+}
+
 
 sub sp_request_timeouted {
     my $response = shift // return undef;
@@ -1547,19 +1598,24 @@ sub activate_volume {
     my $perms	    = $vol->{snapshot} ? 'ro' : 'rw';
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
+    my $src_node    = _get_migration_source_node() || '';
 
-    DEBUG('activate_volume: storeid %s, scfg %s, volname %s, exclusive %s',
-	$storeid, $scfg, $volname, $exclusive);
+    DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
+	$storeid, $src_node, $scfg, $volname, $exclusive);
 
     if (!sp_is_empty($vmid)) {
 	log_info("Volume $vol->{name} is related to VM $vmid, checking status");
-	my $vm_status = get_vm_status($vmid);
+	my $vm_status = $src_node ? get_vm_status($vmid) : {};
 	if (
-	    ($vm_status->{'lock'} // '') ne 'migrate'
-	    && ($vm_status->{'hastate'} // '') ne 'migrate'
+	    ($vm_status->{lock} // '') ne 'migrate'
+	    && ($vm_status->{hastate} // '') ne 'migrate'
 	) {
 	    log_info("NOT a live migration of VM $vmid, will force detach "
 		."volume $vol->{'name'}");
+	    # VM status is not migrate, but is called from migration
+	    # Can happen when the parent PID dies for some reason
+	    # and the shared FS VM lock status is removed from the src node
+	    log_and_die("Failed migration") if $src_node;
 	    $force_detach = 1;
 	} else {
 	    log_info("Live migration of VM $vmid, will not force detach volume "
