@@ -25,37 +25,41 @@ sub set_apiage { # Backward compatible number of versions
     *PVE::Storage::APIAGE = defined $ver ? sub { $ver } : undef
 }
 
+my $PROX_VER = 11;
+my $PROX_AGE = 2;
+my $PLUG_VER = 11;
 # api()
+
 
 set_apiver();
 set_apiage();
 is( get_ver(), 3, 'Min API version' ); # Returns min version when the APIVER() is missing
 
-set_apiver(10);
+set_apiver($PROX_VER);
 set_apiage(1);
-is( get_ver(), 10, 'Max API verion' );
+is( get_ver(), $PLUG_VER, 'Max API verion' );
 
 set_apiver(4);
 set_apiage(1);
 is( get_ver(), 4, 'Version match' );
 
-set_apiver(11);
-set_apiage(1);
-is( get_ver(), 10, 'Current API version' );
+set_apiver($PROX_VER);
+set_apiage($PROX_AGE);
+is( get_ver(), $PLUG_VER, 'Current API version' );
 
-set_apiver(11);
+set_apiver($PROX_VER + 1);
 set_apiage(0);
 is( get_ver(), 3, 'API version not compatible, age 0' );
 
-set_apiver(12);
+set_apiver($PROX_VER + 2);
 set_apiage(1);
 is( get_ver(), 3, 'API version not compatible, age 1' );
 
 set_apiver(500);
 set_apiage(499);
-is( get_ver(), 10, 'API version high AGE high' );
+is( get_ver(), $PLUG_VER, 'API version high AGE high' );
 
-set_apiver(500);
+set_apiver(5000);
 set_apiage(1);
 is( get_ver(), 3, 'API version high AGE low' );
 
