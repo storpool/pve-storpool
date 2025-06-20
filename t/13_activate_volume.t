@@ -124,6 +124,18 @@ my $vm_status_response_vmid;
     }
 }
 
+undef $@;
+@endpoints = ();
+$STAGE = 4.1;
+$volname = "snap-55-disk-0-proxmox-p-1.2.3-sp-$version.raw";
+$vm_status_response = {lock=>1};
+$expected_reassign_request->[0]->{force}  = JSON::true;
+$expected_reassign_request->[0]->{detach} = 'all';
+$result = eval { $class->activate_volume('storeid',{migratedfrom=>'mars'}, $volname) };
+
+is($result, undef, "$STAGE: failed migration result");
+like($@, qr/failed migration/i, "$STAGE: failed migration error set");
+
 
 undef $@;
 @endpoints = ();
@@ -142,26 +154,41 @@ is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 undef $@;
 @endpoints = ();
 $STAGE = 5;
+$vm_status_response_vmid = undef;
 $volname = "vm-11-disk-0-sp-4.1.3.raw";
 $expected_reassign_request = [{"detach"=>"all","rw"=>[666],"force"=>JSON::true,"volume"=>"~4.1.3"}];
 $result = $class->activate_volume('storeid',{}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
-is($vm_status_response_vmid, 11, "$STAGE: volume ID");
+is($vm_status_response_vmid, undef, "$STAGE: volume ID vm_status not called");
 is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 
-# Lock migrate
+# Lock migrate from migration
 undef $@;
 @endpoints = ();
 $STAGE = 6;
 $volname = "vm-11-disk-0-sp-4.1.3.raw";
 $vm_status_response = { lock => 'migrate', hastate => '' };
 $expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3"}];
-$result = $class->activate_volume('storeid',{}, $volname);
+$result = $class->activate_volume('storeid',{migratedfrom=>'mars'}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID");
 is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 
+
+
+# Lock migrate, not executed from migration
+undef $@;
+@endpoints = ();
+$STAGE = 7;
+$volname = "vm-11-disk-0-sp-4.1.3.raw";
+$vm_status_response = { lock => 'migrate', hastate => '' };
+$expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3", force=>JSON::true, detach=>"all"}];
+$result = $class->activate_volume('storeid',{other=>'mars'}, $volname);
+
+isnt($result, undef, "$STAGE: volume");
+is($vm_status_response_vmid, 11, "$STAGE: volume ID");
+is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 
 done_testing();
