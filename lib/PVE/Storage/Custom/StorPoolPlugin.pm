@@ -225,7 +225,8 @@ sub DEBUG {
 	if !$path;
 
     if( scalar(@$data) ) {
-        $msg = sprintf($msg, 
+        $msg = sprintf($msg,
+	    map{ /^(.*)$/ }
 	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
     }
 
