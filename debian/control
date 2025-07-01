@@ -25,7 +25,6 @@ Depends:
  libpve-common-perl,
  libpve-storage-perl,
  libwww-perl,
- sp-pve-fixes,
  systemd,
  ${misc:Depends},
  ${perl:Depends},
