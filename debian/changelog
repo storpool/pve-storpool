@@ -1,3 +1,12 @@
+pve-storpool (0.5.2-1) bookworm-backports; urgency=medium
+  * New upstream release
+  * Refactor the code to be aligned with PBP
+  * Add unit tests
+  * Fix volume is detached from the source when VM migration fails
+    due to interruption on the destination node.
+  * Add HTTP retry on API timeout
+  * Remove sp-pve-fixes package dependency
+
 pve-storpool (0.5.1-1) bookworm-backports; urgency=medium
 
   * New upstream release
