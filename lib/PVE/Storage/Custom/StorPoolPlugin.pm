@@ -18,6 +18,8 @@ use Time::HiRes 'time';
 use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
+use POSIX 'SIGKILL';
+use Linux::Prctl 'set_pdeathsig';
 
 use PVE::Storage;
 use PVE::Storage::Plugin;
@@ -1600,23 +1602,34 @@ sub activate_volume {
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
     my $src_node    = _get_migration_source_node() || '';
+    my $parent_pid  = getppid;
+
+    set_pdeathsig(SIGKILL);
 
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
 
+    if ($parent_pid == 1) {
+	log_and_die("activate_volume parent PID is dead");
+    }
+
     if (!sp_is_empty($vmid)) {
 	log_info("Volume $vol->{name} is related to VM $vmid, checking status");
-	my $vm_status = $src_node ? get_vm_status($vmid) : {};
+	my $vm_status = get_vm_status($vmid);
 	if (
 	    ($vm_status->{lock} // '') ne 'migrate'
 	    && ($vm_status->{hastate} // '') ne 'migrate'
 	) {
+	    # Here the parent PID can be dead, so check it again
+	    # when dead the migration's lock status will be cleared, so die
+	    my $ppid = getppid;
+	    if( $parent_pid != $ppid || $ppid == 1 ){
+		log_and_die("Migration failed, parent PID is missing");
+	    }
+
 	    log_info("NOT a live migration of VM $vmid, will force detach "
 		."volume $vol->{'name'}");
-	    # VM status is not migrate, but is called from migration
-	    # Can happen when the parent PID dies for some reason
-	    # and the shared FS VM lock status is removed from the src node
-	    log_and_die("Failed migration") if $src_node;
+
 	    $force_detach = 1;
 	} else {
 	    log_info("Live migration of VM $vmid, will not force detach volume "
@@ -1642,6 +1655,7 @@ sub activate_volume {
 	log_and_die "Internal StorPool error: could not find the just-attached"
 	    ." volume $global_id at $path"
     }
+    set_pdeathsig(0);
 }
 
 sub deactivate_volume {
