@@ -45,6 +45,7 @@ use constant {
     HTTP_TOTAL_TIMEOUT=> 30 * 60,# Timeout including retries
     HTTP_RETRY_COUNT => 3, # How much retries after timeout/cant connect
     HTTP_RETRY_TIME  => 3, # How much to wait before retry in seconds
+    MAIN_PARENT_PID  => 1, # INIT PID, it will adopt any parentless child
     VTAG_VIRT	     => 'virt',
     VTAG_LOC	     => 'pve-loc',
     VTAG_STORE	     => 'pve',
@@ -1609,7 +1610,7 @@ sub activate_volume {
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
 
-    if ($parent_pid == 1) {
+    if ($parent_pid == MAIN_PARENT_PID) {
 	log_and_die("activate_volume parent PID is dead");
     }
 
@@ -1623,7 +1624,7 @@ sub activate_volume {
 	    # Here the parent PID can be dead, so check it again
 	    # when dead the migration's lock status will be cleared, so die
 	    my $ppid = getppid;
-	    if( $parent_pid != $ppid || $ppid == 1 ){
+	    if( $parent_pid != $ppid || $ppid == MAIN_PARENT_PID ){
 		log_and_die("Migration failed, parent PID is missing");
 	    }
 
