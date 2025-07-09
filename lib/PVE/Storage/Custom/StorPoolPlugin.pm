@@ -45,7 +45,7 @@ use constant {
     HTTP_TOTAL_TIMEOUT=> 30 * 60,# Timeout including retries
     HTTP_RETRY_COUNT => 3, # How much retries after timeout/cant connect
     HTTP_RETRY_TIME  => 3, # How much to wait before retry in seconds
-    MAIN_PARENT_PID  => 1, # INIT PID, it will adopt any parentless child
+    INIT_PID	     => 1, # INIT PID, it will adopt any parentless child
     VTAG_VIRT	     => 'virt',
     VTAG_LOC	     => 'pve-loc',
     VTAG_STORE	     => 'pve',
@@ -1589,6 +1589,8 @@ sub get_vm_status {
 
 
 sub activate_volume {
+    set_pdeathsig(SIGKILL);
+
     my $self	    = shift;
     my $storeid	    = shift;
     my $scfg	    = shift;
@@ -1605,12 +1607,10 @@ sub activate_volume {
     my $src_node    = _get_migration_source_node() || '';
     my $parent_pid  = getppid;
 
-    set_pdeathsig(SIGKILL);
-
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
 
-    if ($parent_pid == MAIN_PARENT_PID) {
+    if ($parent_pid == INIT_PID) {
 	log_and_die("activate_volume parent PID is dead");
     }
 
@@ -1621,12 +1621,6 @@ sub activate_volume {
 	    ($vm_status->{lock} // '') ne 'migrate'
 	    && ($vm_status->{hastate} // '') ne 'migrate'
 	) {
-	    # Here the parent PID can be dead, so check it again
-	    # when dead the migration's lock status will be cleared, so die
-	    my $ppid = getppid;
-	    if( $parent_pid != $ppid || $ppid == MAIN_PARENT_PID ){
-		log_and_die("Migration failed, parent PID is missing");
-	    }
 
 	    log_info("NOT a live migration of VM $vmid, will force detach "
 		."volume $vol->{'name'}");

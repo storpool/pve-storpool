@@ -19,7 +19,7 @@ use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpo
 my $init_pid = get_init_pid();
 {
     no warnings qw/redefine prototype/;
-    *PVE::Storage::Custom::StorPoolPlugin::MAIN_PARENT_PID = sub { $init_pid };
+    *PVE::Storage::Custom::StorPoolPlugin::INIT_PID = sub { $init_pid };
 }
 
 # =head3 $plugin->activate_volume($storeid, \%scfg, $volname, $snapname [, \%cache])
