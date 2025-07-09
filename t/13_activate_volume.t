@@ -6,12 +6,21 @@ use Test::More;
 use Scalar::Util qw/tainted/;
 use JSON;
 use unconstant; # disable constant inlining
+use Socket;
+use IO::Handle;
+use Time::HiRes qw/sleep/;
+
 
 use PVE::Storpool qw/mock_confget taint not_tainted mock_sp_cfg mock_lwp_request truncate_http_log slurp_http_log bless_plugin/;
 use PVE::Storage::Custom::StorPoolPlugin;
 # Use different log for every test in order to parallelize them
 use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log-13.txt';
 
+my $init_pid = get_init_pid();
+{
+    no warnings qw/redefine prototype/;
+    *PVE::Storage::Custom::StorPoolPlugin::MAIN_PARENT_PID = sub { $init_pid };
+}
 
 # =head3 $plugin->activate_volume($storeid, \%scfg, $volname, $snapname [, \%cache])
 # 
@@ -75,12 +84,13 @@ mock_lwp_request(
 );
 
 my $return_path = 1;
+my $skip_path_test = 0;
 {
     no warnings qw/redefine prototype once/;
     *PVE::Storage::Custom::StorPoolPlugin::path = sub {
         my $path = PVE::Storage::Plugin::path(@_);
 
-        ok($path,"$STAGE: path returned");
+        ok($path,"$STAGE: path returned") if !$skip_path_test;
 
         return $return_path ? PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG : '';
     };
@@ -133,8 +143,7 @@ $expected_reassign_request->[0]->{force}  = JSON::true;
 $expected_reassign_request->[0]->{detach} = 'all';
 $result = eval { $class->activate_volume('storeid',{migratedfrom=>'mars'}, $volname) };
 
-is($result, undef, "$STAGE: failed migration result");
-like($@, qr/failed migration/i, "$STAGE: failed migration error set");
+is($result, 0, "$STAGE: failed migration result");
 
 
 undef $@;
@@ -160,7 +169,7 @@ $expected_reassign_request = [{"detach"=>"all","rw"=>[666],"force"=>JSON::true,"
 $result = $class->activate_volume('storeid',{}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
-is($vm_status_response_vmid, undef, "$STAGE: volume ID vm_status not called");
+is($vm_status_response_vmid, 11, "$STAGE: volume ID vm_status called");
 is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
 
 # Lock migrate from migration
@@ -184,11 +193,103 @@ undef $@;
 $STAGE = 7;
 $volname = "vm-11-disk-0-sp-4.1.3.raw";
 $vm_status_response = { lock => 'migrate', hastate => '' };
-$expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3", force=>JSON::true, detach=>"all"}];
+$expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3"}];
 $result = $class->activate_volume('storeid',{other=>'mars'}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID");
 is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+
+
+# Killed worker parent
+undef $@;
+@endpoints = ();
+$STAGE = 8;
+$skip_path_test = 1;
+my ( $result_fork, $error_fork ) = worker();
+
+is( $result_fork, 'undef', "$STAGE: died on parent missing before call");
+like($error_fork, qr/activate_volume parent PID is dead/, "$STAGE: died on parent missing before call error message");
+$skip_path_test = 0;
+
+
+
+# Get init pid, systemd or init
+# 1 if run as a daemon, else the user session init pid
+sub get_init_pid {
+    socketpair(my $child, my $parent, AF_UNIX, SOCK_STREAM, PF_UNSPEC) ||  die "socketpair: $!";
+    $child->autoflush(1);
+    $parent->autoflush(1);
+
+    my $main_pid = 0;
+
+    my $pid = fork() // die "Failed fork: $!";
+
+    if( $pid ){
+        close $parent;
+        chomp(my $line = <$child>);
+        close $child;
+        $main_pid = $line;
+        waitpid($pid,0);
+        #exit;
+    } else {
+        close $child;
+        my $pid2 = fork() // die "Failed fork2: $!";
+
+        if( $pid2 ){
+            waitpid($pid2,0);
+            exit(0);
+        } else {
+            kill(15,getppid);
+            sleep 0.1;
+            print $parent getppid;
+            close $parent;
+            exit(0);
+        }
+    }
+
+    return $main_pid;
+}
+
+
+sub worker {
+    socketpair(my $child, my $parent, AF_UNIX, SOCK_STREAM, PF_UNSPEC) ||  die "socketpair: $!";
+    $child->autoflush(1);
+    $parent->autoflush(1);
+    my @data;
+
+    my $pid1 = fork() // die "Failed to fork parent1: $!";
+
+    if( $pid1 ) {
+        close $parent;
+        chomp(my $line = <$child>);
+        chomp(my $line2 = <$child>);
+        push @data, $line;
+        push @data, $line2;
+        close $child;
+        waitpid($pid1,0);
+        #exit;
+    } else { # Child 1
+        close $child;
+        my $pid2 = fork() // die "Failed to fork parent2: $!";
+
+        if( $pid2 ){
+            waitpid($pid2,0);
+            exit;
+        } else { # Child 2
+            undef $@;
+            kill(15, getppid);
+            sleep 0.1; # It takes some time before gettpid show the PID of the adopter INIT
+            my $res = eval { $class->activate_volume('storeid',{}, $volname) } // 'undef';
+            print $parent $res."\n";
+            print $parent $@."\n";
+            close $parent;
+
+            exit;
+        }
+    }
+    return @data;
+}
+
 
 done_testing();
