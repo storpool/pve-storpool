@@ -1412,6 +1412,8 @@ sub alloc_image {
     my $name	= shift;
     my $size	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
+    my $config  = { sp_confget() };
+    my $perm	= $config->{_SP_VEEAM_COMPAT} ? 'ro' : 'rw';
 
     DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
 	$storeid, $scfg, $vmid, $fmt, $name, $size );
@@ -1464,7 +1466,7 @@ sub alloc_image {
 	$cfg,
 	$vol->{globalId},
 	$cfg->{api}->{ourid},
-	'rw',
+	$perm,
 	0,
 	$vol->{snapshot},
 	1
