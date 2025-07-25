@@ -1412,6 +1412,8 @@ sub alloc_image {
     my $name	= shift;
     my $size	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
+    my $config  = { sp_confget() };
+    my $perm	= $config->{_SP_VEEAM_COMPAT} ? 'ro' : 'rw';
 
     DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
 	$storeid, $scfg, $vmid, $fmt, $name, $size );
@@ -1464,7 +1466,7 @@ sub alloc_image {
 	$cfg,
 	$vol->{globalId},
 	$cfg->{api}->{ourid},
-	'rw',
+	$perm,
 	0,
 	$vol->{snapshot},
 	1
@@ -1661,6 +1663,10 @@ sub deactivate_volume {
     my $cache	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $path	= $self->path($scfg, $volname, $storeid);
+    my $config = { sp_confget() };
+    my $force_detach = 0;
+
+    $force_detach = 1 if $config->{_SP_VEEAM_COMPAT};
 
     DEBUG('deactivate_volume: storeid %s, scfg %s, volname %s, path %s, exist %s',
 	$storeid, $scfg, $volname, $path, -b $path);
@@ -1671,7 +1677,14 @@ sub deactivate_volume {
 
     # TODO: pp: remove this when the configuration goes into the plugin?
     my $result = sp_vol_attach(
-	$cfg, $global_id, $cfg->{api}->{ourid}, 'ro', 0, $vol->{snapshot}, 0);
+	$cfg,
+	$global_id,
+	$cfg->{api}->{ourid},
+	'ro',
+	0,
+	$vol->{snapshot},
+	$force_detach
+    );
     DEBUG('deactivate_volume result: %s', $result);
     return $result;
 }
