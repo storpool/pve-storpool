@@ -45,6 +45,7 @@ taint($volname);
 bless_plugin();
 
 my $expected_reassign_request = [{ro=>[666],snapshot=>"~4.3.2"}];
+my $response_error = undef;
 
 truncate_http_log();
 mock_lwp_request(
@@ -61,13 +62,18 @@ mock_lwp_request(
 
         push @endpoints, $endpoint;
 
+        if( $response_error ){
+            return { code => 200, content => encode_json({generation=>12, error=>$response_error}) }
+        }
+
         if( $uri =~ /VolumesReassignWait$/ ) {
             my $decoded = decode_json($content);
             is($method,'POST', "$STAGE: VolumesReassignWait POST");
             is_deeply($decoded, $expected_reassign_request, "$STAGE: VolumesReassignWait POST data");
             return { code => 200, content => encode_json({generation=>12, data=>{ok=>JSON::true}}) }
+        } else {
+            fail("Unknown URI $uri");
         }
-
 
     }
 );
@@ -106,14 +112,52 @@ $STAGE = 3;
 @endpoints = ();
 $return_path = '/tmp/block_file';
 create_block_file($return_path);
+$expected_reassign_request = [{snapshot=>"~4.3.2", force=>JSON::false, detach=>[666]}];
 
 $result = $class->deactivate_volume('storeid',{}, $volname);
 unlink $return_path;
 
 SKIP: {
     skip "You must be root to test with creating block file", 2 if $> != 0;
-    is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: deatched");
+    #is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: detached");
+    is_deeply($result,undef,"$STAGE: detached");
     is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+}
+
+# VEEAM
+undef $@;
+$STAGE = '4 VEEAM';
+@endpoints = ();
+$return_path = '/tmp/block_file';
+create_block_file($return_path);
+$expected_reassign_request = [{ro=>[666],snapshot=>"~4.3.2"}];
+mock_confget( SP_API_HTTP_HOST => 'local-machine', SP_API_HTTP_PORT=>80, SP_AUTH_TOKEN=>'token', SP_OURID=>666, _SP_VEEAM_COMPAT => 1 );
+
+$result = $class->deactivate_volume('storeid',{}, $volname);
+unlink $return_path;
+
+SKIP: {
+    skip "You must be root to test with creating block file", 2 if $> != 0;
+    is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: attached ro");
+    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+}
+
+# Error is raised - volume detach is called with ignoreError => 0
+undef $@;
+$STAGE = '5 VEEAM Error';
+@endpoints = ();
+$return_path = '/tmp/block_file';
+create_block_file($return_path);
+$response_error = { descr => 'Error-here' };
+mock_confget( SP_API_HTTP_HOST => 'local-machine', SP_API_HTTP_PORT=>80, SP_AUTH_TOKEN=>'token', SP_OURID=>666, _SP_VEEAM_COMPAT => 1 );
+
+$result = eval { $class->deactivate_volume('storeid',{}, $volname) };
+unlink $return_path;
+
+SKIP: {
+    skip "You must be root to test with creating block file", 2 if $> != 0;
+    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+    like($@, qr/Error-here/, "$STAGE: died");
 }
 
 done_testing();
