@@ -1413,7 +1413,6 @@ sub alloc_image {
     my $size	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $config  = { sp_confget() };
-    my $perm	= $config->{_SP_VEEAM_COMPAT} ? 'ro' : 'rw';
 
     DEBUG("alloc_image: storeid %s, scfg %s, vmid %s, fmt %s, name %s, size %s",
 	$storeid, $scfg, $vmid, $fmt, $name, $size );
@@ -1462,15 +1461,17 @@ sub alloc_image {
     }
 
     my $vol = sp_vol_info_single($cfg, $global_id);
-    sp_vol_attach(
-	$cfg,
-	$vol->{globalId},
-	$cfg->{api}->{ourid},
-	$perm,
-	0,
-	$vol->{snapshot},
-	1
-    );
+    if ( $config->{_SP_VEEAM_COMPAT} ) {
+	sp_vol_attach(
+	    $cfg,
+	    $vol->{globalId},
+	    $cfg->{api}->{ourid},
+	    'rw',
+	    0,
+	    $vol->{snapshot},
+	    1
+	);
+    }
     my $result = sp_encode_volsnap_from_tags($vol);
     DEBUG('alloc_image result: %s', $result);
     return $result;
@@ -1664,29 +1665,32 @@ sub deactivate_volume {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $path	= $self->path($scfg, $volname, $storeid);
     my $config = { sp_confget() };
-    my $force_detach = 0;
-
-    $force_detach = 1 if $config->{_SP_VEEAM_COMPAT};
 
     DEBUG('deactivate_volume: storeid %s, scfg %s, volname %s, path %s, exist %s',
 	$storeid, $scfg, $volname, $path, -b $path);
     return if ! -b $path;
 
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
-    my $global_id = $vol->{globalId};
+    my ($global_id, $is_snapshot) = ($vol->{globalId}, $vol->{snapshot});
 
-    # TODO: pp: remove this when the configuration goes into the plugin?
-    my $result = sp_vol_attach(
-	$cfg,
-	$global_id,
-	$cfg->{api}->{ourid},
-	'ro',
-	0,
-	$vol->{snapshot},
-	$force_detach
-    );
-    DEBUG('deactivate_volume result: %s', $result);
-    return $result;
+    if ( $config->{_SP_VEEAM_COMPAT} ) {
+	DEBUG('deactivate_volume: VEEAM: attach ro');
+	my $result = sp_vol_attach(
+	    $cfg,
+	    $global_id,
+	    $cfg->{api}->{ourid},
+	    'ro',
+	    0,
+	    $vol->{snapshot},
+	    0
+	);
+	DEBUG('deactivate_volume VEEAM result: %s', $result);
+	return $result;
+    } else {
+	DEBUG('deactivate_volume: detach');
+	sp_vol_detach($cfg, $global_id, $cfg->{api}->{ourid}, 1, $is_snapshot);
+    }
+    DEBUG('deactivate_volume: done');
 }
 
 sub free_image {
