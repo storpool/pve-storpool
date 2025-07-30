@@ -131,7 +131,7 @@ undef $@;
 @endpoints = ();
 $result =  eval { PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, undef, 'raw', 'name', 1024) };
 like($@, qr/Only unnamed StorPool volumes supported/, "$STAGE: Invalid volume name");
-like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5--VolumesReassignWait $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
+like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5 $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
 
 
 
@@ -142,7 +142,7 @@ $response_vol_info->{data}->[0]->{name} = '~4.1.3';
 
 $result =  PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, undef, 'raw', 'kakak', 1024);
 is($result, 'vm-5-cloudinit.raw', "$STAGE: alloc_image returns the correct name");
-like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5--VolumesReassignWait $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
+like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5 $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
 
 
 
@@ -153,7 +153,7 @@ $expected_request->{tags}->{'pve-vm'}   = '';
 $expected_request->{tags}->{'pve-disk'} = 'cloudinit'; # In the request we get that it's a cloudinit type disk
 $result =  PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, "", 'raw', 'vm-6-cloudinit', 1024);
 is($result, 'vm-5-cloudinit.raw', "$STAGE: alloc_image returns the correct name");
-like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5--VolumesReassignWait $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
+like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5 $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
 
 # VM snapshot state inconsistent name
 $STAGE = '5';
@@ -171,7 +171,7 @@ $expected_request->{tags}->{'pve-disk'} = 'state';
 $expected_request->{tags}->{'pve-snap'} = 'proxmox.raw';
 $result = PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, '11', 'raw', 'vm-11-state-proxmox.raw', 1024);
 is($result, 'vm-5-cloudinit.raw', "$STAGE: alloc_image returns the correct name");
-like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5--VolumesReassignWait $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
+like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5 $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
 
 # Find free disk by vmid
 $STAGE = '7';
@@ -183,7 +183,7 @@ $result = PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, '11'
 is($result, 'vm-5-cloudinit.raw', "$STAGE: alloc_image returns the correct name");
 like(
     join("--",@endpoints),
-    qr{^ VolumesAndSnapshotsList--VolumeCreate--Volume/~5--VolumesReassignWait $}x,
+    qr{^ VolumesAndSnapshotsList--VolumeCreate--Volume/~5 $}x,
     "$STAGE: correct API calls used"
 ) or diag explain \@endpoints;
 # TODO untaint
@@ -195,9 +195,27 @@ TODO: {
 }
 
 
+
+### VEEAM
+
+mock_confget( SP_API_HTTP_HOST => 'local-machine', SP_API_HTTP_PORT=>80, SP_OURID=>666, SP_AUTH_TOKEN=>'token', _SP_VEEAM_COMPAT => 1 );
+$STAGE = '8 VEEAM';
+@endpoints = ();
+$expected_request->{tags}->{'pve-snap'} = 'proxmox.raw';
+$expected_request->{tags}->{'pve-disk'} = 'state'; # In the request we get that it's a cloudinit type disk
+$result =  PVE::Storage::Custom::StorPoolPlugin::alloc_image(undef, 666, {}, "11", 'raw', 'vm-11-state-proxmox.raw', 1024);
+is($result, 'vm-5-cloudinit.raw', "$STAGE: alloc_image returns the correct name");
+like(join("--",@endpoints), qr{^ VolumeCreate--Volume/~5--VolumesReassignWait $}x, "$STAGE: correct API calls used") or diag explain \@endpoints;
+
+delete $expected_request->{tags}->{'pve-snap'};
+$expected_request->{tags}->{'pve-disk'} = '124'; # In the request we get that it's a cloudinit type disk
+
+mock_confget( SP_API_HTTP_HOST => 'local-machine', SP_API_HTTP_PORT=>80, SP_OURID=>666, SP_AUTH_TOKEN=>'token', _SP_VEEAM_COMPAT => 0 );
+
+
 ### Missing API responses
 # Missing volume info
-$STAGE = '8';
+$STAGE = '9';
 @endpoints = ();
 undef $@;
 $response_vol_info->{data_orig} = $response_vol_info->{data};
@@ -212,7 +230,7 @@ like(
 ) or diag explain \@endpoints;
 
 # Missing create volume response
-$STAGE = '9';
+$STAGE = '10';
 @endpoints = ();
 undef $@;
 $response_vol_info->{data} = $response_vol_info->{data_orig};
