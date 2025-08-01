@@ -25,6 +25,7 @@ my $DEPS = {
     'Config::IniFiles'  => { debian => 'libconfig-inifiles-perl',                ubuntu => 'libconfig-inifiles-perl' },
     'JSON'              => { debian => 'libjson-perl',                           ubuntu => 'libjson-perl' },
     'LWP::UserAgent'    => { debian => 'libwww-perl liblwp-protocol-https-perl', ubuntu => 'libwww-perl' },
+    'Linux::Prctl'      => { debian => 'liblinux-prctl-perl',                    ubuntu => 'liblinux-prctl-perl' },
 # Test depends
     'Unix::Mknod'       => { debian => 'libunix-mknod-perl',                     ubuntu => 'libunix-mknod-perl' },
 #    'unconstant'        => {}, # Disables constant inlining, included in tlib/
