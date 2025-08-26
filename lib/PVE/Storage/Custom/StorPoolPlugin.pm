@@ -5,7 +5,7 @@ use v5.16;
 
 use strict;
 use warnings;
-use version; our $VERSION = version->declare("v0.5.2");
+use version; our $VERSION = version->declare("v0.5.3");
 
 use Carp qw/carp croak confess shortmess longmess/;
 use Config::IniFiles;

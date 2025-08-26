@@ -9,6 +9,12 @@ This repository contains the Proxmox VE plugin that allows the use of
 the StorPool storage backend.
 The documentation may be viewed [at its StorPool web home][repo].
 
+## Configuration file location
+
+```
+/etc/storpool.conf.d/proxmox.conf
+```
+
 ## Tests
 1. Install the Perl dependencies with
 ```

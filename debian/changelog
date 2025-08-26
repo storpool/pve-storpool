@@ -1,3 +1,9 @@
+pve-storpool (0.5.3-1) bookworm-backports; urgency=medium
+
+  * Add optional flag _SP_VEEAM_COMPAT for veeam related backups
+
+ -- StorPool <support@storpool.com>  Tue, 26 Aug 2025 12:14:36 +0000
+
 pve-storpool (0.5.2-1) bookworm-backports; urgency=medium
   * New upstream release
   * Refactor the code to be aligned with PBP
