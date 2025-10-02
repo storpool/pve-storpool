@@ -1,6 +1,8 @@
 pve-storpool (0.5.3-1) bookworm-backports; urgency=medium
 
   * Add optional flag _SP_VEEAM_COMPAT for veeam related backups
+  * Rework the fix in 0.5.2 for when a volume is detached when
+    the VM migration fails. Use the flag _FAIL_MIGRATION_PARENT
 
  -- StorPool <support@storpool.com>  Tue, 26 Aug 2025 12:14:36 +0000
 
