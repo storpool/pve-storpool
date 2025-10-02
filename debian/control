@@ -10,7 +10,6 @@ Build-Depends:
  libconfig-inifiles-perl,
  libjson-perl,
  libwww-perl,
- liblinux-prctl-perl,
  libunix-mknod-perl
 Standards-Version: 4.6.2
 Homepage: https://repo.storpool.com/public/doc/pve/pve-storpool/
@@ -26,7 +25,6 @@ Depends:
  libpve-common-perl,
  libpve-storage-perl,
  libwww-perl,
- liblinux-prctl-perl,
  systemd,
  ${misc:Depends},
  ${perl:Depends},
