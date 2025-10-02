@@ -19,7 +19,6 @@ use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
 use POSIX 'SIGKILL';
-use Linux::Prctl 'set_pdeathsig';
 
 use PVE::Storage;
 use PVE::Storage::Plugin;
@@ -45,7 +44,6 @@ use constant {
     HTTP_TOTAL_TIMEOUT=> 30 * 60,# Timeout including retries
     HTTP_RETRY_COUNT => 3, # How much retries after timeout/cant connect
     HTTP_RETRY_TIME  => 3, # How much to wait before retry in seconds
-    INIT_PID	     => 1, # INIT PID, it will adopt any parentless child
     VTAG_VIRT	     => 'virt',
     VTAG_LOC	     => 'pve-loc',
     VTAG_STORE	     => 'pve',
@@ -298,6 +296,8 @@ sub _get_caller_args {
     return;
 }
 
+# get the name of the node where the migration initiated from
+# undef if not a migration
 sub _get_migration_source_node {
     for( 0..10 ) {
 	my @args = _get_caller_args( $_ );
@@ -1590,10 +1590,7 @@ sub get_vm_status {
     return $status;
 }
 
-
 sub activate_volume {
-    set_pdeathsig(SIGKILL);
-
     my $self	    = shift;
     my $storeid	    = shift;
     my $scfg	    = shift;
@@ -1608,14 +1605,9 @@ sub activate_volume {
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
     my $src_node    = _get_migration_source_node() || '';
-    my $parent_pid  = getppid;
 
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
-
-    if ($parent_pid == INIT_PID) {
-	log_and_die("activate_volume parent PID is dead");
-    }
 
     if (!sp_is_empty($vmid)) {
 	log_info("Volume $vol->{name} is related to VM $vmid, checking status");
@@ -1624,6 +1616,10 @@ sub activate_volume {
 	    ($vm_status->{lock} // '') ne 'migrate'
 	    && ($vm_status->{hastate} // '') ne 'migrate'
 	) {
+	    my $config	    = { sp_confget() };
+	    if( $config->{_FAIL_MIGRATION_PARENT} && $src_node ){
+		log_and_die("Migration failed: live migration status is gone.");
+	    }
 
 	    log_info("NOT a live migration of VM $vmid, will force detach "
 		."volume $vol->{'name'}");
@@ -1653,7 +1649,6 @@ sub activate_volume {
 	log_and_die "Internal StorPool error: could not find the just-attached"
 	    ." volume $global_id at $path"
     }
-    set_pdeathsig(0);
 }
 
 sub deactivate_volume {
