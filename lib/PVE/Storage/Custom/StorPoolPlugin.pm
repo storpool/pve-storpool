@@ -18,7 +18,6 @@ use Time::HiRes 'time';
 use JSON;
 use LWP::UserAgent;
 use LWP::Simple;
-use POSIX 'SIGKILL';
 
 use PVE::Storage;
 use PVE::Storage::Plugin;
@@ -1569,6 +1568,9 @@ sub get_vm_status {
     my $props	    = PVE::Cluster::get_guest_config_properties($tags) || {};
     my $hastatus    = PVE::HA::Config::read_manager_status()   || {service_status=>{}};
     my $haresources = PVE::HA::Config::read_resources_config() || {ids=>{}};
+    my $vms_info    = PVE::Cluster::get_vmlist() || {ids=>{}};
+    my $vm_info	    = $vms_info->{ids}->{$vmid} || {};
+    my $vm_node	    = $vm_info->{node}; # { type=>qemu, node=>'na', version=>9 }
     my $vm_props    = $props->{ $vmid } || {};
     my $hatypemap   = { qw/qemu vm lxc ct/ };
     my $hastate	    = '';
@@ -1584,7 +1586,7 @@ sub get_vm_status {
     my $lock = $vm_props->{lock}     || '';
     $hastate = $hastate_sid->{state} || '';
 
-    my $status = { lock => $lock, hastate => $hastate };
+    my $status = { lock => $lock, hastate => $hastate, node => $vm_node };
     log_info("VM $vmid parsed status: { lock => $lock, hastate => $hastate }");
 
     return $status;
@@ -1605,6 +1607,7 @@ sub activate_volume {
     my $vmid	    = $vol->{tags}->{VTAG_VM()};
     my $force_detach = 0;
     my $src_node    = _get_migration_source_node() || '';
+    my $current_node= PVE::INotify::nodename();
 
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
@@ -1619,6 +1622,10 @@ sub activate_volume {
 	    my $config	    = { sp_confget() };
 	    if( $config->{_FAIL_MIGRATION_PARENT} && $src_node ){
 		log_and_die("Migration failed: live migration status is gone.");
+	    }
+	    # Only when migrating the vm node will differ from the current node
+	    if( $current_node ne $vm_status->{node} ){
+		log_and_die("Migration failed: live migration was interrupted");
 	    }
 
 	    log_info("NOT a live migration of VM $vmid, will force detach "
