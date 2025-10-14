@@ -16,11 +16,6 @@ use PVE::Storage::Custom::StorPoolPlugin;
 # Use different log for every test in order to parallelize them
 use constant *PVE::Storage::Custom::StorPoolPlugin::SP_PVE_Q_LOG => '/tmp/storpool_http_log-13.txt';
 
-my $init_pid = get_init_pid();
-{
-    no warnings qw/redefine prototype/;
-    *PVE::Storage::Custom::StorPoolPlugin::INIT_PID = sub { $init_pid };
-}
 
 # =head3 $plugin->activate_volume($storeid, \%scfg, $volname, $snapname [, \%cache])
 # 
@@ -206,13 +201,26 @@ undef $@;
 @endpoints = ();
 $STAGE = 8;
 $skip_path_test = 1;
-my ( $result_fork, $error_fork ) = worker();
+
 SKIP: {
     skip "tracking parent PID alive";
+    my ( $result_fork, $error_fork ) = worker(); 
     is( $result_fork, 'undef', "$STAGE: died on parent missing before call");
     like($error_fork, qr/activate_volume parent PID is dead/, "$STAGE: died on parent missing before call error message");
     $skip_path_test = 0;
 }
+
+undef $@;
+@endpoints = ();
+$STAGE = 9;
+$volname = "vm-11-disk-0-sp-4.1.3.raw";
+$vm_status_response = { lock => '', hastate => '', node => 'different' };
+$expected_reassign_request = [{"rw"=>[666],"volume"=>"~4.1.3"}];
+$result = eval { $class->activate_volume('storeid',{other=>'mars'}, $volname) };
+
+is($result, undef, "$STAGE: volume");
+is($vm_status_response_vmid, 11, "$STAGE: volume ID");
+like($@, qr/Migration failed: live migration was interrupted/, "$STAGE: interrupted live migration failed OK");
 
 
 
