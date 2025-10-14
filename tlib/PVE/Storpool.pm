@@ -218,4 +218,9 @@ package PVE::Cluster;
     sub get_clinfo {
         { cluster => { name => 'storpool' } }
     }
+package PVE::INotify;
+
+    sub nodename {
+        'localhost'
+    }
 'o_0';
