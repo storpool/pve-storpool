@@ -25,6 +25,8 @@ Rename a volume source snapshot C<$source_snap> to a target snapshot C<$target_s
 my ( $http_uri, $http_request, $http_method, @endpoints );
 my $STAGE = 1;
 my $global_id = '4.1.3';
+my $tags_return = { 'pve-snap'=>'old_snap', 'pve-snap-v' => $global_id ,'pve-loc'=>'storpool', 'pve-vm'=>'5',virt=>'pve',pve=>'storeid' };
+my $tags = { 'pve-snap'=>'new_snap', 'pve-snap-v' => $global_id ,'pve-loc'=>'storpool', 'pve-vm'=>'5',virt=>'pve',pve=>'storeid' };
 
 truncate_http_log();
 mock_lwp_request(
@@ -49,7 +51,7 @@ mock_lwp_request(
                 code => 200, 
                 content => encode_json({generation=>12, 
                     data=>[
-                        {globalId=>$global_id,tags=>{'pve-snap'=>'old_snap', 'pve-snap-v' => $global_id ,'pve-loc'=>'storpool', 'pve-vm'=>'5',virt=>'pve',pve=>'storeid'} }
+                        {globalId=>$global_id,tags=>$tags_return }
                     ]
                 }) 
             };
@@ -57,7 +59,7 @@ mock_lwp_request(
 
         if( $uri =~ m{ /SnapshotUpdate/~\Q$global_id\E$ }x ){
 			is($method, 'POST', "SnapshotUpdate POST");
-            is_deeply(decode_json($content), {rename=>'new_snap'}, "SnapshotUpdate POST data");
+            is_deeply(decode_json($content), {tags=>$tags}, "SnapshotUpdate POST data");
             return { code => 200, content => encode_json({generation=>12, data=>{ok=>JSON::true}}) }
         }
 

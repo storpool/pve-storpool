@@ -591,10 +591,13 @@ sub sp_snap_info($$) {
 
 sub sp_snap_rename {
     my $cfg	 = shift // log_and_die("Missing storpool config");
-    my $snap_id  = shift // log_and_die("Missing snapshot ID");
+    my $snap     = shift // log_and_die("Missing snapshot ID");
     my $new_name = shift // log_and_die("Missing new snapshot nname");
 
-    my $res = sp_post($cfg, "SnapshotUpdate/~$snap_id", {rename=>$new_name});
+    my $tags = $snap->{tags};
+    $tags->{ VTAG_SNAP() } = $new_name;
+
+    my $res = sp_post($cfg, "SnapshotUpdate/~".$snap->{globalId}, {tags=>$tags});
 
     log_and_die($res->{error}->{descr}) if $res->{error};
 
@@ -2133,7 +2136,7 @@ sub rename_snapshot {
 	log_and_die("rename_snapshot: multiple snapshots found for one volume with the name $src_snap");
     } else {
 	my $snapshot = $snaps[0];
-	sp_snap_rename($cfg, $snapshot->{globalId}, $dest_snap);
+	sp_snap_rename($cfg, $snapshot, $dest_snap);
     }
 
     DEBUG( 'rename_snapshot DONE: storeid %s, volname %s, src %s, dest %s',
