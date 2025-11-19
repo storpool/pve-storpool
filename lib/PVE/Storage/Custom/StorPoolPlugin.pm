@@ -2048,12 +2048,11 @@ sub volume_snapshot {
     my $storeid = shift;
     my $volname = shift;
     my $snap	= shift;
-    my $running = shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
     DEBUG('volume_snapshot: scfg %s, storeid %s, volname %s, snap %s, run %s,vol %s',
-	$scfg, $storeid, $volname, $snap, $running, $vol);
+	$scfg, $storeid, $volname, $snap, $vol);
 
     sp_vol_snapshot(
 	$cfg,
