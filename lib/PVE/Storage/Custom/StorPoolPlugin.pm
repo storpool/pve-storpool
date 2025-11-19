@@ -2124,7 +2124,7 @@ sub rename_snapshot {
     my @dest_snaps = sp_volume_find_snapshots($cfg, $vol, $dest_snap);
 
     if (scalar(@dest_snaps) > 0) {
-        log_and_die("rename_snapshot: Target snapshot '$dest_snap already exists!'");
+        log_and_die("rename_snapshot: Target snapshot '$dest_snap' already exists!");
     }
 
     if (scalar(@snaps) == 0) {
