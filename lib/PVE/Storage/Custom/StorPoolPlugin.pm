@@ -2133,7 +2133,7 @@ sub rename_snapshot {
 	log_and_die("rename_snapshot: multiple snapshots found for one volume with the name $src_snap");
     } else {
 	my $snapshot = $snaps[0];
-	sp_snap_rename($cfg, $src_snap, $dest_snap);
+	sp_snap_rename($cfg, $snapshot->{globalId}, $dest_snap);
     }
 
     DEBUG( 'rename_snapshot DONE: storeid %s, volname %s, src %s, dest %s',
