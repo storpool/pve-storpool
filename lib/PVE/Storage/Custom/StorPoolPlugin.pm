@@ -589,6 +589,21 @@ sub sp_snap_info($$) {
     return $res;
 }
 
+sub sp_snap_rename {
+    my $cfg	 = shift // log_and_die("Missing storpool config");
+    my $snap     = shift // log_and_die("Missing snapshot ID");
+    my $new_name = shift // log_and_die("Missing new snapshot nname");
+
+    my $tags = $snap->{tags};
+    $tags->{ VTAG_SNAP() } = $new_name;
+
+    my $res = sp_post($cfg, "SnapshotUpdate/~".$snap->{globalId}, {tags=>$tags});
+
+    log_and_die($res->{error}->{descr}) if $res->{error};
+
+    return $res;
+}
+
 sub sp_disk_list($) {
     my $cfg = shift;
 
@@ -1228,7 +1243,7 @@ sub sp_cfg($$) {
 
 sub api {
     my $minver = 3;
-    my $maxver = 11;
+    my $maxver = 13;
 
     # We kind of depend on the way `use constant` declares a function.
     # If we try to use barewords and not functions, the compiler will
@@ -2048,12 +2063,11 @@ sub volume_snapshot {
     my $storeid = shift;
     my $volname = shift;
     my $snap	= shift;
-    my $running = shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
     DEBUG('volume_snapshot: scfg %s, storeid %s, volname %s, snap %s, run %s,vol %s',
-	$scfg, $storeid, $volname, $snap, $running, $vol);
+	$scfg, $storeid, $volname, $snap, $vol);
 
     sp_vol_snapshot(
 	$cfg,
@@ -2093,6 +2107,40 @@ sub volume_snapshot_delete {
 
     DEBUG('volume_snapshot_delete: done');
     return
+}
+
+sub rename_snapshot {
+    my $self	  = shift;
+    my $scfg	  = shift;
+    my $storeid   = shift;
+    my $volname   = shift;
+    my $src_snap  = shift;
+    my $dest_snap = shift;
+
+    my $cfg	= sp_cfg($scfg, $storeid);
+    my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
+
+    DEBUG( 'rename_snapshot: storeid %s, volname %s, src %s, dest %s',
+	$storeid, $volname, $src_snap, $dest_snap );
+
+    my @snaps = sp_volume_find_snapshots($cfg, $vol, $src_snap);
+    my @dest_snaps = sp_volume_find_snapshots($cfg, $vol, $dest_snap);
+
+    if (scalar(@dest_snaps) > 0) {
+        log_and_die("rename_snapshot: Target snapshot '$dest_snap' already exists!");
+    }
+
+    if (scalar(@snaps) == 0) {
+	log_and_die("rename_snapshot: no snapshot found with the name $src_snap");
+    } elsif (scalar(@snaps) > 1) {
+	log_and_die("rename_snapshot: multiple snapshots found for one volume with the name $src_snap");
+    } else {
+	my $snapshot = $snaps[0];
+	sp_snap_rename($cfg, $snapshot, $dest_snap);
+    }
+
+    DEBUG( 'rename_snapshot DONE: storeid %s, volname %s, src %s, dest %s',
+	$storeid, $volname, $src_snap, $dest_snap );
 }
 
 sub volume_snapshot_rollback {
