@@ -463,6 +463,21 @@ sub sp_request {
     }
 }
 
+# Checks if the volume/snapshot is on a local cluster
+# The idea is to disallow managing volumes from one cluster to another
+# die when remote
+sub assert_sp_vol_local_cluster {
+    my $vol = shift;
+    my $cfg = shift;
+
+    if( !sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) ){
+	my $cluster = sp_vol_get_tag($vol, VTAG_LOC) // '';
+	my $name = $vol->{name} // '';
+	my $type = $vol->{snapshot} ? 'Snapshot' : 'Volume';
+	die "$type '$name' is part of another cluster: " . $cluster;
+    }
+}
+
 sub sp_vol_create($$$$;$){
     my ($cfg, $size, $template, $ignoreError, $tags) = @_;
 
@@ -1623,6 +1638,8 @@ sub activate_volume {
     my $src_node    = _get_migration_source_node() || '';
     my $current_node= PVE::INotify::nodename();
 
+    assert_sp_vol_local_cluster($vol, $cfg);
+
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
 	$storeid, $src_node, $scfg, $volname, $exclusive);
 
@@ -1689,6 +1706,8 @@ sub deactivate_volume {
     my $vol = sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $is_snapshot) = ($vol->{globalId}, $vol->{snapshot});
 
+    assert_sp_vol_local_cluster($vol, $cfg);
+
     if ( $config->{_SP_VEEAM_COMPAT} ) {
 	DEBUG('deactivate_volume: VEEAM: attach ro');
 	my $result = sp_vol_attach(
@@ -1718,6 +1737,8 @@ sub free_image {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
     my ($global_id, $is_snapshot) = ($vol->{globalId}, $vol->{snapshot});
+
+    assert_sp_vol_local_cluster($vol, $cfg);
 
     DEBUG('free_image: storeid %s, scfg %s, volname %s, is_base %s, vol %s',
 	$storeid, $scfg, $volname, $is_base, $vol);
@@ -1830,7 +1851,7 @@ sub list_volumes_with_cache {
 	'list_volumes_with_cache: storeid %s,scfg %s,vmid %s,content-types %s',
 	$storeid, $scfg, $vmid, $content_types);
 
-    for my $vol (@{$volStatus->{data}->{volumes}}) {
+    for my $vol (@{$volStatus->{data}->{volumes}}){
 	next if !sp_is_ours($cfg, $vol);
 	my $v_type = sp_vol_get_tag($vol, VTAG_TYPE);
 	next unless defined($v_type) && exists $ctypes{$v_type};
@@ -2017,6 +2038,8 @@ sub volume_resize {
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
 
+    assert_sp_vol_local_cluster($vol, $cfg);
+
     DEBUG('volume_resize: scfg %s, storeid %s, volname %s, size %s, run %s, vol %s',
 	$scfg, $storeid, $volname, $size, $running, $vol);
     sp_vol_update($cfg, $vol->{globalId}, { size => $size }, 0);
@@ -2065,6 +2088,8 @@ sub volume_snapshot {
     my $snap	= shift;
     my $cfg	= sp_cfg($scfg, $storeid);
     my $vol	= sp_decode_volsnap_to_tags($volname, $cfg);
+
+    assert_sp_vol_local_cluster($vol, $cfg);
 
     DEBUG('volume_snapshot: scfg %s, storeid %s, volname %s, snap %s, run %s,vol %s',
 	$scfg, $storeid, $volname, $snap, $vol);
@@ -2226,6 +2251,8 @@ sub rename_volume($$$$$$) {
     my $target_volname	= shift;
     my $cfg		= sp_cfg($scfg, $storeid);
     my $vol		= sp_decode_volsnap_to_tags($source_volname, $cfg);
+
+    assert_sp_vol_local_cluster($vol, $cfg);
 
     DEBUG('rename_volume: scfg %s, storeid %s, source_volname %s,'
 	.'target_vmid %s, target_volume %s, vol %s',
