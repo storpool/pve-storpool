@@ -472,7 +472,16 @@ sub assert_sp_vol_local_cluster {
 
     my $cluster = sp_vol_get_tag($vol, VTAG_LOC);
 
-    if( $cluster && !sp_vol_tag_is($vol, VTAG_LOC, sp_get_loc_name($cfg)) ){
+    if( !$cluster && $vol->{globalId} ) {
+	if( !$vol->{snapshot} ){
+	   $vol = sp_vol_info_single($cfg, $vol->{globalId});
+	} else {
+	   $vol = sp_snap_info_single($cfg, $vol->{globalId});
+	}
+	$cluster = sp_vol_get_tag($vol, VTAG_LOC);
+    }
+
+    if( $cluster && $cluster ne sp_get_loc_name($cfg) ){
 	my $name = $vol->{name} // '';
 	my $type = $vol->{snapshot} ? 'Snapshot' : 'Volume';
 	die "$type '$name' is part of another cluster: " . $cluster;
