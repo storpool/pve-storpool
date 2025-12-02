@@ -75,6 +75,12 @@ mock_lwp_request(
             is($content,'', "$STAGE: ClientConfigWait empty data request");
             return { code => 200, content => encode_json({generation=>12, data=>{ok=>JSON::true, clientGeneration=>666, configStatus=>'running',delay=>123,generation=>11,id=>11}}) }
         }
+        elsif( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
+        }
     }
 );
 
@@ -96,7 +102,7 @@ undef $@;
 my $result = $class->volume_resize({},'storeid', $volname, $size, $running) ;
 
 is(!!$result, 1, "$STAGE: volume resize OK");
-is_deeply(\@endpoints, ["VolumeUpdate/~$version",666], "$STAGE: volume resize API calls");
+is_deeply(\@endpoints, ['Snapshot/~4.3.2',"VolumeUpdate/~$version",666], "$STAGE: volume resize API calls");
 
 
 done_testing();

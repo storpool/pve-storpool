@@ -68,6 +68,12 @@ mock_lwp_request(
 
             return { code => 200, content => encode_json( $response_vol_info ) }
         }
+        elsif( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
+        }
     }
 );
 
@@ -85,7 +91,7 @@ undef $@;
 my $result = $class->rename_volume({},'storeid',$volname);
 
 is($result, 'storeid:vm-5-cloudinit.raw', "Snapshot rollback result");
-is_deeply(\@endpoints,["VolumeUpdate/~$version","Volume/~$version"], "Correct API calls used");
+is_deeply(\@endpoints,['Snapshot/~4.1.3',"VolumeUpdate/~$version","Volume/~$version"], "Correct API calls used");
 
 
 done_testing();
