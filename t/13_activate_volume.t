@@ -10,7 +10,6 @@ use Socket;
 use IO::Handle;
 use Time::HiRes qw/sleep/;
 
-
 use PVE::Storpool qw/mock_confget taint not_tainted mock_sp_cfg mock_lwp_request truncate_http_log slurp_http_log bless_plugin/;
 use PVE::Storage::Custom::StorPoolPlugin;
 # Use different log for every test in order to parallelize them
@@ -60,7 +59,7 @@ mock_lwp_request(
         my $uri     = $request->uri . "";
         my $content = $request->content;
         my $method  = $request->method;
-        my ( $endpoint ) = ( $uri =~ m{/(\w+(?:/~\d)?)$} );
+        my ( $endpoint ) = ( $uri =~ m{/(\w+(?:/~\d.*)?)$} );
 
         $http_uri       = $uri;
         $http_request   = $content;
@@ -74,6 +73,12 @@ mock_lwp_request(
             return { code => 200, content => encode_json({generation=>12, data=>{ok=>JSON::true}}) }
         }
 
+        if( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
+        }
 
     }
 );
@@ -115,7 +120,7 @@ $return_path = 1;
 $result = $class->activate_volume('storeid',{}, $volname);
 
 is($@, '', "$STAGE: volume attached");
-is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+is_deeply(\@endpoints, ['Snapshot/~4.3.2','VolumesReassignWait'], "$STAGE: API called");
 
 ## Snapshot
 
@@ -152,7 +157,7 @@ $result = $class->activate_volume('storeid',{}, $volname);
 
 isnt($result, undef, "$STAGE: snapshot");
 is($vm_status_response_vmid, 55, "$STAGE: get_vm_status correct ID");
-is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+is_deeply(\@endpoints,['Snapshot/~4.3.2','VolumesReassignWait'], "$STAGE: api called");
 
 
 undef $@;
@@ -165,7 +170,7 @@ $result = $class->activate_volume('storeid',{}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID vm_status called");
-is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+is_deeply(\@endpoints,['Volume/~4.1.3','VolumesReassignWait'], "$STAGE: api called");
 
 # Lock migrate from migration
 undef $@;
@@ -178,7 +183,7 @@ $result = $class->activate_volume('storeid',{migratedfrom=>'mars'}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID");
-is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+is_deeply(\@endpoints,['Volume/~4.1.3','VolumesReassignWait'], "$STAGE: api called");
 
 
 
@@ -193,7 +198,7 @@ $result = $class->activate_volume('storeid',{other=>'mars'}, $volname);
 
 isnt($result, undef, "$STAGE: volume");
 is($vm_status_response_vmid, 11, "$STAGE: volume ID");
-is_deeply(\@endpoints,['VolumesReassignWait'], "$STAGE: api called");
+is_deeply(\@endpoints,['Volume/~4.1.3','VolumesReassignWait'], "$STAGE: api called");
 
 
 # Killed worker parent

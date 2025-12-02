@@ -52,6 +52,12 @@ mock_lwp_request(
 			is_deeply(decode_json($content), $expected, "API call POST data");
             return $response;
         }
+        elsif( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
+        }
 
     }
 );
@@ -70,7 +76,7 @@ undef $@;
 my $result = $class->volume_snapshot({},'storeid',$volname);
 
 is($result, undef, "Snapshot result");
-is_deeply(\@endpoints,["VolumeSnapshot/~$version"], "Correct API call used");
+is_deeply(\@endpoints,['Snapshot/~4.3.2',"VolumeSnapshot/~$version"], "Correct API call used");
 
 
 ## Error from the API
@@ -81,7 +87,7 @@ $result = eval { $class->volume_snapshot({},'storeid',$volname) };
 
 is($result,undef,"error result");
 like($@, qr/Main error/, "API error displayed");
-is_deeply(\@endpoints,["VolumeSnapshot/~$version"], "Correct API call used");
+is_deeply(\@endpoints,['Snapshot/~4.3.2',"VolumeSnapshot/~$version"], "Correct API call used");
 
 
 done_testing();

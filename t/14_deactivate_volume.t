@@ -55,7 +55,7 @@ mock_lwp_request(
         my $uri     = $request->uri . "";
         my $content = $request->content;
         my $method  = $request->method;
-        my ( $endpoint ) = ( $uri =~ m{/(\w+(?:/~\d)?)$} );
+        my ( $endpoint ) = ( $uri =~ m{/(\w+(?:/~\d.*)?)$} );
 
         $http_uri       = $uri;
         $http_request   = $content;
@@ -71,6 +71,12 @@ mock_lwp_request(
             is($method,'POST', "$STAGE: VolumesReassignWait POST");
             is_deeply($decoded, $expected_reassign_request, "$STAGE: VolumesReassignWait POST data");
             return { code => 200, content => encode_json({generation=>12, data=>{ok=>JSON::true}}) }
+        } 
+        elsif( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
         } else {
             fail("Unknown URI $uri");
         }
@@ -121,7 +127,7 @@ SKIP: {
     skip "You must be root to test with creating block file", 2 if $> != 0;
     #is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: detached");
     is_deeply($result,undef,"$STAGE: detached");
-    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+    is_deeply(\@endpoints, ['Snapshot/~4.3.2','VolumesReassignWait'], "$STAGE: API called");
 }
 
 # VEEAM
@@ -139,7 +145,7 @@ unlink $return_path;
 SKIP: {
     skip "You must be root to test with creating block file", 2 if $> != 0;
     is_deeply($result,{generation=>12, data=>{ok=>JSON::true}},"$STAGE: attached ro");
-    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
+    is_deeply(\@endpoints, ['Snapshot/~4.3.2','VolumesReassignWait'], "$STAGE: API called");
 }
 
 # Error is raised - volume detach is called with ignoreError => 0
@@ -156,8 +162,9 @@ unlink $return_path;
 
 SKIP: {
     skip "You must be root to test with creating block file", 2 if $> != 0;
-    is_deeply(\@endpoints, ['VolumesReassignWait'], "$STAGE: API called");
     like($@, qr/Error-here/, "$STAGE: died");
+    is_deeply(\@endpoints, ['Snapshot/~4.3.2'], "$STAGE: API called");
+
 }
 
 done_testing();

@@ -75,6 +75,12 @@ mock_lwp_request(
                 }) 
             }
         }
+        elsif( $uri =~ m{/(Snapshot|Volume)/~\d+\.\d+\.\d+} ){
+
+            my $expected = {"tags"=>{"pve-loc"=>"storpool","pve-type"=>"iso","pve"=>"storeid","pve-comment"=>"test","pve-snap"=>"4.3.2","pve-snap"=>JSON::true,"virt"=>"pve"}};
+
+            return { code=>200, content => encode_json({generation=>12, data=>[$expected]}) };
+        }
 
     }
 );
@@ -106,7 +112,7 @@ $STAGE = 2;
 @endpoints = ();
 $result = $class->free_image('storeid',{}, $volname);
 is($result, undef, "$STAGE: snapshot delete");
-is_deeply(\@endpoints,['VolumesReassignWait','SnapshotDelete/~4.3.2'], "$STAGE: snapshot delete API call");
+is_deeply(\@endpoints,['Snapshot/~4.3.2','VolumesReassignWait','SnapshotDelete/~4.3.2'], "$STAGE: snapshot delete API call");
 
 undef $@;
 $STAGE = 3;
@@ -116,6 +122,6 @@ $expected_reassign_request = [{volume=>"~4.1.3", force=>JSON::false,detach=>'all
 $result = $class->free_image('storeid',{}, $volname);
 
 is($result, undef, "$STAGE: cleanup parent snapshots result OK");
-is_deeply(\@endpoints,['VolumesReassignWait','VolumeDelete/~4.1.3','SnapshotsList','SnapshotDelete/~12'], "$STAGE: API calls OK");
+is_deeply(\@endpoints,['Volume/~4.1.3','VolumesReassignWait','VolumeDelete/~4.1.3','SnapshotsList','SnapshotDelete/~12'], "$STAGE: API calls OK");
 
 done_testing();
