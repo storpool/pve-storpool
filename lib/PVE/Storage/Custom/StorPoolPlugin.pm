@@ -219,15 +219,25 @@ sub DEBUG {
     confess("Missing debug path, set _SP_PVE_DEBUG_PATH and restart") if !$path;
     confess("Message must be a string") if ref($msg);
 
-    ($path) = ( $path =~ m{^((?:/[\w\-]+)*[\w\-]+\.\w+)$} );
+    ($path) = ( $path =~ m{^((?:/[\w\-]+)*[\w\-]+\.\w+)$} ); # untaint path
 
     confess("Invalid path '$config->{_SP_PVE_DEBUG_PATH}'. Try with /var/log/storpool/debug.log")
 	if !$path;
 
     if( scalar(@$data) ) {
-        $msg = sprintf($msg,
-	    map{ /^(.*)$/ }
-	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data )
+        my @msg = map{ /^(.*)$/ }
+	    map{ Data::Dumper->new([$_])->Terse(1)->Indent(0)->Dump } @$data;
+
+	while( my $item = shift @msg ){
+	    if( !($msg =~ s/(?<!\\)\%(?:s|d)/$item/) ){ # ignore \%s placeholders
+		unshift @msg, $item; # Return last item to include it later
+		last;
+	    }
+	}
+	if( scalar @msg > 0 ){
+	    warn "More debug data provided than placeholders!";
+	    $msg .= ": missed - " . join(" ", @msg);
+	}
     }
 
     if( $lvl eq '1' ){
