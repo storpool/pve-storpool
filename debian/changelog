@@ -1,3 +1,14 @@
+pve-storpool (0.5.4-1) UNRELEASED; urgency=medium
+
+  * PVE9 compatibility
+  * Add rename_snapshot method
+  * Improve handling volumes after migration to another Storpool
+    cluster, now it operates only on the local cluster.
+  * Fix internal debug method failure in some cases with tainted
+    data.
+
+ -- StorPool <support@storpool.com>  Thu, 08 Jan 2026 11:20:03 +0000
+
 pve-storpool (0.5.3-1) bookworm-backports; urgency=medium
 
   * Rework the previous fix when a volume is detached during
