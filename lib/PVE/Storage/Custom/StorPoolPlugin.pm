@@ -1734,7 +1734,7 @@ sub deactivate_volume {
 	    $cfg,
 	    $global_id,
 	    $cfg->{api}->{ourid},
-	    'ro',
+	    'rw',
 	    0,
 	    $vol->{snapshot},
 	    0

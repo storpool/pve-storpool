@@ -136,7 +136,7 @@ $STAGE = '4 VEEAM';
 @endpoints = ();
 $return_path = '/tmp/block_file';
 create_block_file($return_path);
-$expected_reassign_request = [{ro=>[666],snapshot=>"~4.3.2"}];
+$expected_reassign_request = [{rw=>[666],snapshot=>"~4.3.2"}];
 mock_confget( SP_API_HTTP_HOST => 'local-machine', SP_API_HTTP_PORT=>80, SP_AUTH_TOKEN=>'token', SP_OURID=>666, _SP_VEEAM_COMPAT => 1 );
 
 $result = $class->deactivate_volume('storeid',{}, $volname);
