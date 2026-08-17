@@ -54,6 +54,7 @@ use constant {
     VTAG_SNAP	     => 'pve-snap',
     VTAG_SNAP_PARENT => 'pve-snap-v',
     VTAG_V_PVE	     => 'pve',
+    VTAG_SHADOW	     => 'pve-shadow',
 
     RE_NAME_GLOBAL_ID => qr{
 	^
@@ -1658,6 +1659,7 @@ sub activate_volume {
     my $src_node    = _get_migration_source_node() || '';
     my $current_node= PVE::INotify::nodename();
 
+    $ENV{SP_DRE_LIB} = 1;
     assert_sp_vol_local_cluster($vol, $cfg);
 
     DEBUG('activate_volume: storeid %s, src %s scfg %s, volname %s, exclusive %s',
@@ -1670,6 +1672,20 @@ sub activate_volume {
 	    ($vm_status->{lock} // '') ne 'migrate'
 	    && ($vm_status->{hastate} // '') ne 'migrate'
 	) {
+	    local $@ = undef;
+	    my $req = eval { require '/usr/sbin/sp_dre' };
+	    my $vol_info = !$@ ? sp_vol_info_single($cfg, $vol->{globalId}) : {};
+
+	    if( !$@ && $vol_info->{tags}->{VTAG_SHADOW()} ){ #DRE installed, restore if shadow vol
+		my $dre = SP_DRE->new();
+
+		log_info("Restore DR volume $vol->{name}");
+		my $res = $dre->restore_volume( vm => $vmid, volume => $vol->{globalId} );
+		if( $res->{status} eq 'failed' ){
+		    log_and_die("Failed to revert DR volume $vol: $res->{message}");
+		}
+	    }
+
 	    my $config	    = { sp_confget() };
 	    if( $config->{_FAIL_MIGRATION_PARENT} && $src_node ){
 		log_and_die("Migration failed: live migration status is gone.");
@@ -1734,7 +1750,7 @@ sub deactivate_volume {
 	    $cfg,
 	    $global_id,
 	    $cfg->{api}->{ourid},
-	    'rw',
+	    'ro',
 	    0,
 	    $vol->{snapshot},
 	    0
