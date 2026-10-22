@@ -1,4 +1,11 @@
-pve-storpool (0.5.4-1) UNRELEASED; urgency=medium
+pve-storpool (0.5.5-1) UNRELEASED; urgency=medium
+
+  * Bump Proxmox storage API version to 15
+  * Change Veeam volumes from read-only to read-wrire
+
+ -- StorPool <support@storpool.com>  Thu, 22 Oct 2026 10:25:00 +0000
+
+pve-storpool (0.5.4-1) bookworm-backports; urgency=medium
 
   * PVE9 compatibility
   * Add rename_snapshot method
