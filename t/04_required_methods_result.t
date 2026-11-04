@@ -25,9 +25,9 @@ sub set_apiage { # Backward compatible number of versions
     *PVE::Storage::APIAGE = defined $ver ? sub { $ver } : undef
 }
 
-my $PROX_VER = 15;
+my $PROX_VER = 16;
 my $PROX_AGE = 2;
-my $PLUG_VER = 15;
+my $PLUG_VER = 16;
 # api()
 
 
