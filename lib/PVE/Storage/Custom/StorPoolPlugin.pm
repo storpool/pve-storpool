@@ -5,7 +5,7 @@ use v5.16;
 
 use strict;
 use warnings;
-use version; our $VERSION = version->declare("v0.5.5");
+use version; our $VERSION = version->declare("v0.5.6");
 
 use Carp qw/carp croak confess shortmess longmess/;
 use Config::IniFiles;
@@ -1278,7 +1278,7 @@ sub sp_cfg($$) {
 
 sub api {
     my $minver = 3;
-    my $maxver = 15;
+    my $maxver = 16;
 
     # We kind of depend on the way `use constant` declares a function.
     # If we try to use barewords and not functions, the compiler will
