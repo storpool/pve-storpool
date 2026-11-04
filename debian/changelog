@@ -1,4 +1,10 @@
-pve-storpool (0.5.5-1) UNRELEASED; urgency=medium
+pve-storpool (0.5.6-1) UNRELEASED; urgency=medium
+
+  * Bump Proxmox storage API version to 16
+
+ -- StorPool <support@storpool.com>  Wed, 04 Nov 2026 08:40:00 +0000
+
+pve-storpool (0.5.5-1) trixie-backports; urgency=medium
 
   * Bump Proxmox storage API version to 15
   * Change Veeam volumes from read-only to read-wrire
