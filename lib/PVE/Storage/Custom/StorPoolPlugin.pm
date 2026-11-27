@@ -1199,6 +1199,7 @@ sub cfg_format_version($) {
 # Get some storpool settings from storpool.conf and /etc/storpool.conf.d/
 sub sp_confget() {
     my %res;
+    ( $ENV{PATH} ) = ( $ENV{PATH} =~ /^(.*)$/ );
     open my $f, '-|', 'storpool_confget'
 	or log_and_die "Could not run storpool_confget: $!";
 
@@ -1329,14 +1330,25 @@ sub type {
 
 # The capabilities of the plugin
 sub plugindata {
+    my $config = { sp_confget() };
 
-    return {
+    my $pdata = {
 	content => [
 	    { images => 1, rootdir => 1, iso => 1, backup => 1, none => 1 },
 	    { images => 1, rootdir => 1 }
 	],
 	format => [ { raw => 1 } , 'raw' ],
+	features => {
+	    atomic_snapshot => {
+		allow_different_templates => $config->{SP_PVE_ATOMIC_DIFF_TMPL} // 1,
+		freeze_fs		  => $config->{SP_PVE_ATOMIC_FREEZEFS} // 0,
+	    },
+	}
     };
+    if( $config->{SP_PVE_ATOMIC_DISABLE} ){
+	delete $pdata->{features}->{atomic_snapshot};
+    }
+    return $pdata;
 }
 
 # The properties the plugin can handle
@@ -1785,6 +1797,7 @@ sub volume_has_feature {
     my $snapname = shift;
     my $running  = shift;
     my $key	 = undef;
+    my $config   = { sp_confget() };
 
     DEBUG('volume_has_feature: scfg %s, feature %s, storeid %s, volname %s,'
 	.'snapname %s, running %s',
@@ -1796,7 +1809,10 @@ sub volume_has_feature {
 	rename	    => { current => 1, },
 	sparseinit  => { base => 1, current => 1, snap => 1 },
 	copy	    => { base => 1, current => 1, snap => 1 },
+	atomic_snapshot    => { current => 1, snap => 1 },
     };
+    delete $features->{atomic_snapshot} if $config->{SP_PVE_ATOMIC_DISABLE};
+
     my ($vtype, $name, $vmid, , undef, undef, $isBase) =
 	$self->parse_volname($volname, sp_cfg($scfg, $storeid));
 
@@ -2130,6 +2146,48 @@ sub volume_snapshot {
     return;
 }
 
+# Performs an atomic (crash-consistent) snapshot of all volumes at once.
+sub volumes_atomic_snapshot {
+    my $self	 = shift || debug_die("Missing object");
+    my $scfg	 = shift || debug_die("Missing storage configuration");
+    my $voldata  = shift || debug_die("Missing volume data list");
+    my $snapname = shift || debug_die("Missing snapname");
+    my $sp_cfg;
+    my @volumes;
+
+
+    DEBUG('volumes_atomic_snapshot: voldata %s, snapname %s', $voldata, $snapname);
+
+    if( ref($voldata) && ref($voldata) ne 'ARRAY' ){
+        log_and_die("Storpool: atomic snapshot, volumes are not a list");
+    }
+
+    for my $volume (@$voldata) {
+	my $volname = $volume->{name} || debug_die("Missing volume name snap $snapname");
+	my $storeid = $volume->{storeid} || debug_die("Missing storeid for vol $volname");
+	$sp_cfg = sp_cfg(
+	    $scfg,
+	    $storeid
+        );
+	my $vol = sp_decode_volsnap_to_tags($volname, $sp_cfg);
+	my $snap_spec = {
+	    volume => $vol->{name},
+	    tags   => {
+		%{ $vol->{tags} },
+		sp_get_tags($sp_cfg),
+		VTAG_SNAP() => $snapname,
+		VTAG_SNAP_PARENT() => $vol->{globalId},
+	    },
+	};
+	push(@volumes, $snap_spec);
+    }
+
+    DEBUG('volumes_atomic_snapshot POST: volumes %s', \@volumes);
+    my $res = sp_post($sp_cfg, "VolumesGroupSnapshot", { volumes => \@volumes });
+    log_and_die("Storpool: ".$res->{error}->{descr}) if $res->{error};
+}
+
+
 sub volume_snapshot_delete {
     my $self	= shift;
     my $scfg	= shift;
@@ -2144,7 +2202,6 @@ sub volume_snapshot_delete {
 	'volume_snapshot_delete: scfg %s, storeid %s, volname %s, '
 	.'snap %s, run %s, vol %s',
 	$scfg, $storeid, $volname, $snap, $running, $vol);
-
 
     for my $snap_obj (sp_volume_find_snapshots($cfg, $vol, $snap)) {
 	sp_snap_del($cfg, $snap_obj->{globalId}, 0);
